@@ -1,0 +1,15 @@
+[project]
+name = "pomodoro-bot"
+version = "0.1.0"
+description = "Voice-driven wake-word + speech-to-text prototype."
+requires-python = ">=3.10"
+dependencies = [
+  "faster-whisper",
+  "pvporcupine",
+  "pvrecorder",
+  "pyinstaller",
+  "typing-extensions",
+]
+
+[tool.uv]
+package = false
