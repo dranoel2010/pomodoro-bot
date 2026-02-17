@@ -2,12 +2,18 @@
 name = "pomodoro-bot"
 version = "0.1.0"
 description = "Voice-driven wake-word + speech-to-text prototype."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+  "coqui-tts[codec,languages]>=0.27.5",
   "faster-whisper",
+  "huggingface-hub>=0.36.2",
   "pvporcupine",
   "pvrecorder",
   "pyinstaller",
+  "sounddevice>=0.5.5",
+  "torch>=2.10.0",
+  "torchaudio>=2.10.0",
+  "transformers<5",
   "typing-extensions",
 ]
 

@@ -1,4 +1,5 @@
 import logging
+import os
 import signal
 import sys
 import time
@@ -16,6 +17,13 @@ from wake_word import (
     WakeWordDetectedEvent,
     WakeWordErrorEvent,
     WakeWordService,
+)
+from tts import (
+    CoquiTTSEngine,
+    SoundDeviceAudioOutput,
+    SpeechService,
+    TTSConfig,
+    TTSError,
 )
 
 
@@ -96,6 +104,29 @@ def main() -> int:
         logger.error(f"STT initialization error: {error}")
         return 1
 
+    # Optional TTS service
+    speech_service: Optional[SpeechService] = None
+    if os.getenv("ENABLE_TTS", "false").lower() == "true":
+        try:
+            tts_config = TTSConfig.from_environment()
+            tts_engine = CoquiTTSEngine(
+                config=tts_config,
+                logger=logging.getLogger("tts.engine"),
+            )
+            tts_output = SoundDeviceAudioOutput(
+                output_device_index=tts_config.output_device_index,
+                logger=logging.getLogger("tts.output"),
+            )
+            speech_service = SpeechService(
+                engine=tts_engine,
+                output=tts_output,
+                logger=logging.getLogger("tts"),
+            )
+            logger.info("TTS enabled")
+        except (ConfigurationError, TTSError) as error:
+            logger.error(f"TTS initialization error: {error}")
+            return 1
+
     # Create wake word service
     event_queue: Queue = Queue()
     publisher = QueueEventPublisher(event_queue)
@@ -158,6 +189,11 @@ def main() -> int:
                             else ""
                         )
                         print(f'\r  💬 "{result.text}"{confidence_str}\n')
+                        if speech_service:
+                            try:
+                                speech_service.speak(result.text)
+                            except TTSError as error:
+                                logger.error(f"TTS playback failed: {error}")
                     else:
                         print("\r  ⚠️  No speech detected\n")
                 except STTError as error:

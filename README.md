@@ -19,7 +19,7 @@ Voice-driven wake-word + speech-to-text prototype using Picovoice Porcupine and 
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - uv (for environment + dependency management)
 - Microphone input device
 - Picovoice assets:
@@ -38,7 +38,7 @@ sudo apt update
 sudo apt install -y python3 python3-venv python3-pip curl git libasound2-dev
 ```
 
-2. Ensure Python is 3.10+:
+2. Ensure Python is 3.11+:
 
 ```bash
 python3 --version
@@ -109,6 +109,13 @@ export WHISPER_COMPUTE_TYPE="int8"     # int8|float16|float32
 export WHISPER_LANGUAGE="de"           # "auto"/"none" for auto-detect
 export WHISPER_BEAM_SIZE="5"
 export WHISPER_VAD_FILTER="true"
+
+# Optional TTS config
+export ENABLE_TTS="true"
+export TTS_MODEL_PATH="thorsten_vits/model_file.pth"
+export TTS_CONFIG_PATH="thorsten_vits/config.json"
+# export TTS_OUTPUT_DEVICE="0"         # optional sounddevice output index
+# export TTS_GPU="false"
 ```
 
 The wake-word env vars map to `WakeWordConfig` as:
