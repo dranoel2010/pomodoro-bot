@@ -114,6 +114,9 @@ export WHISPER_VAD_FILTER="true"
 export ENABLE_TTS="true"
 export TTS_MODEL_PATH="thorsten_vits/model_file.pth"
 export TTS_CONFIG_PATH="thorsten_vits/config.json"
+# if files are missing, they are downloaded automatically:
+# export TTS_HF_REPO_ID="Thorsten-Voice/VITS"
+# export TTS_HF_LOCAL_DIR="thorsten_vits"
 # export TTS_OUTPUT_DEVICE="0"         # optional sounddevice output index
 # export TTS_GPU="false"
 ```
