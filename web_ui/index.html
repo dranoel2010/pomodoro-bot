@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Advanced Interface</title>
+    <style>
+        :root {
+            --glow-color: #00f2ff;
+            --bg-color: #050a0f;
+            --secondary-glow: rgba(0, 242, 255, 0.5);
+            --ui-speed: 1s;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Orbitron', 'Segoe UI', sans-serif;
+            transition: background-color 1s ease;
+        }
+
+        /* Umgebungszustand: Licht */
+        body.light-bright {
+            background-color: #0a1a2a;
+        }
+
+        body.light-dark {
+            background-color: #020508;
+        }
+
+        .container {
+            position: relative;
+            width: 70vw;
+            height: 70vw;
+            max-width: 500px;
+            max-height: 500px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            transition: filter 0.5s ease;
+        }
+
+        /* Luftqualität Farben */
+        .aq-good {
+            --glow-color: #00f2ff;
+            --secondary-glow: rgba(0, 242, 255, 0.5);
+        }
+
+        .aq-bad {
+            --glow-color: #ff4d00;
+            --secondary-glow: rgba(255, 77, 0, 0.5);
+        }
+
+        /* Animationen */
+        @keyframes rotate-cw {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes rotate-ccw {
+            from {
+                transform: rotate(360deg);
+            }
+
+            to {
+                transform: rotate(0deg);
+            }
+        }
+
+        @keyframes pulse-soft {
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.05);
+            }
+        }
+
+        /* Element-Styles */
+        .ring {
+            transform-origin: center;
+            transition: all 0.5s ease;
+            stroke: var(--glow-color);
+        }
+
+        .core {
+            transform-origin: center;
+            fill: var(--glow-color);
+            transition: all 0.5s ease;
+        }
+
+        /* Zustand: Idle */
+        .state-idle .ring-outer {
+            animation: rotate-cw 20s linear infinite;
+        }
+
+        .state-idle .core {
+            animation: pulse-soft 3s ease-in-out infinite;
+        }
+
+        /* Zustand: Zuhören */
+        .state-listening .ring-middle {
+            animation: rotate-cw 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            stroke-width: 12;
+            opacity: 0.8;
+        }
+
+        .state-listening .core {
+            transform: scale(1.2);
+            filter: blur(2px);
+        }
+
+        /* Zustand: Transkription */
+        .state-transcribing .ring-middle {
+            animation: rotate-cw 1.2s linear infinite;
+            stroke-width: 10;
+            opacity: 0.85;
+        }
+
+        .state-transcribing .core {
+            transform: scale(1.15);
+        }
+
+        /* Zustand: Nachdenken */
+        .state-thinking .ring-outer {
+            animation: rotate-cw 3s linear infinite;
+            stroke-dasharray: 20, 50;
+        }
+
+        .state-thinking .ring-inner {
+            animation: rotate-ccw 1.5s linear infinite;
+            stroke-dasharray: 10, 10;
+        }
+
+        /* Zustand: Antworten */
+        .state-replying .core {
+            animation: pulse-soft 0.3s ease-in-out infinite;
+            filter: drop-shadow(0 0 20px var(--glow-color));
+        }
+
+        .state-replying .ring-outer {
+            transform: scale(1.1);
+            opacity: 0.4;
+        }
+
+        /* Zustand: Fehler */
+        .state-error {
+            --glow-color: #ff4d00;
+            --secondary-glow: rgba(255, 77, 0, 0.5);
+        }
+
+        .state-error .core {
+            animation: pulse-soft 0.4s ease-in-out infinite;
+            filter: drop-shadow(0 0 18px var(--glow-color));
+        }
+
+        /* Controls Panel */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--glow-color);
+            color: white;
+            font-size: 11px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--glow-color);
+            color: var(--glow-color);
+            padding: 8px;
+            margin: 2px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-family: 'Orbitron', sans-serif;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        button.active {
+            background: var(--glow-color);
+            color: black;
+            box-shadow: 0 0 10px var(--glow-color);
+        }
+
+        .status-display {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+            color: var(--glow-color);
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--glow-color);
+        }
+
+        .control-group-title {
+            margin: 5px 0;
+            opacity: 0.8;
+            font-weight: bold;
+        }
+    </style>
+    <!-- Einbindung einer Sci-Fi Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="light-dark aq-good">
+
+    <div class="status-display">
+        <div id="main-status">J.A.R.V.I.S. IDLE</div>
+        <div id="env-status" style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px;">Listening for events</div>
+        <div id="ws-indicator" style="font-size: 0.7rem; opacity: 0.9; margin-top: 5px; color: #ff4d00;">WS:
+            DISCONNECTED</div>
+        <div id="last-transcript" style="font-size: 0.7rem; opacity: 0.85; margin-top: 8px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            TRANSCRIPT: -
+        </div>
+        <div id="last-reply" style="font-size: 0.7rem; opacity: 0.85; margin-top: 4px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            REPLY: -
+        </div>
+        <div id="last-error" style="display: none; font-size: 0.7rem; opacity: 0.95; margin-top: 4px; color: #ff4d00; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+    </div>
+
+    <div class="container state-idle" id="jarvis-container">
+        <svg viewBox="0 0 400 400" id="jarvis-svg">
+            <defs>
+                <radialGradient id="coreGradient">
+                    <stop offset="0%" stop-color="white" />
+                    <stop offset="100%" stop-color="var(--glow-color)" />
+                </radialGradient>
+            </defs>
+
+            <!-- Hintergrund Dekoration -->
+            <circle cx="200" cy="200" r="195" fill="none" stroke="var(--secondary-glow)" stroke-width="0.5"
+                stroke-dasharray="2, 5" />
+
+            <!-- Äußerer Ring -->
+            <circle class="ring ring-outer" cx="200" cy="200" r="160" fill="none" stroke-width="2"
+                stroke-dasharray="100, 20" />
+
+            <!-- Mittlerer Ring -->
+            <circle class="ring ring-middle" cx="200" cy="200" r="130" fill="none" stroke-width="5"
+                stroke-dasharray="40, 10" opacity="0.6" />
+
+            <!-- Innerer Ring -->
+            <circle class="ring ring-inner" cx="200" cy="200" r="90" fill="none" stroke-width="1"
+                stroke-dasharray="5, 5" />
+
+            <!-- Kern-Einheit -->
+            <g id="core-group">
+                <circle class="core" cx="200" cy="200" r="35" opacity="0.9" fill="url(#coreGradient)" />
+                <circle cx="200" cy="200" r="28" fill="var(--bg-color)" />
+                <!-- Zentrales Hexagon -->
+                <path d="M200 185 L213 192.5 L213 207.5 L200 215 L187 207.5 L187 192.5 Z" fill="var(--glow-color)"
+                    opacity="0.8">
+                    <animateTransform attributeName="transform" type="rotate" from="0 200 200" to="360 200 200"
+                        dur="10s" repeatCount="indefinite" />
+                </path>
+            </g>
+
+            <!-- Scann-Effekt -->
+            <line x1="100" y1="200" x2="300" y2="200" stroke="var(--glow-color)" stroke-width="0.5" opacity="0.3">
+                <animate attributeName="y1" values="120;280;120" dur="5s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="120;280;120" dur="5s" repeatCount="indefinite" />
+            </line>
+        </svg>
+    </div>
+
+    <script>
+        const container = document.getElementById('jarvis-container');
+        const mainStatus = document.getElementById('main-status');
+        const envStatus = document.getElementById('env-status');
+        const wsIndicator = document.getElementById('ws-indicator');
+        const transcriptStatus = document.getElementById('last-transcript');
+        const replyStatus = document.getElementById('last-reply');
+        const errorStatus = document.getElementById('last-error');
+
+        function setState(state) {
+            container.classList.remove('state-idle', 'state-listening', 'state-transcribing', 'state-thinking', 'state-replying', 'state-error');
+            container.classList.add('state-' + state);
+
+            const labelMap = {
+                'idle': 'IDLE',
+                'listening': 'LISTENING',
+                'transcribing': 'TRANSCRIBING',
+                'thinking': 'THINKING',
+                'replying': 'REPLYING',
+                'error': 'ERROR'
+            };
+            mainStatus.textContent = `J.A.R.V.I.S. ${labelMap[state] || state.toUpperCase()}`;
+        }
+
+        function setStatusMessage(message) {
+            if (typeof message === 'string' && message.trim()) {
+                envStatus.textContent = message.trim();
+            }
+        }
+
+        function clearError() {
+            errorStatus.textContent = '';
+            errorStatus.style.display = 'none';
+        }
+
+        function showError(message) {
+            errorStatus.textContent = `ERROR: ${message}`;
+            errorStatus.style.display = 'block';
+        }
+
+        function connectWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
+            const socket = new WebSocket(wsUrl);
+            socket.onopen = () => {
+                wsIndicator.textContent = "WS: CONNECTED";
+                wsIndicator.style.color = "#00ff00";
+                setStatusMessage("Connected to runtime");
+                clearError();
+            };
+            socket.onmessage = (event) => {
+                console.log('[UI] websocket payload:', event.data);
+                let payload = null;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch (_) {
+                    return;
+                }
+
+                if (typeof payload.message === 'string') {
+                    setStatusMessage(payload.message);
+                }
+
+                const nextState = payload?.state;
+                if (['idle', 'listening', 'transcribing', 'thinking', 'replying', 'error'].includes(nextState)) {
+                    setState(nextState);
+                }
+                if (nextState && nextState !== 'error') {
+                    clearError();
+                }
+
+                if (payload?.type === 'transcript' && typeof payload.text === 'string') {
+                    transcriptStatus.textContent = `TRANSCRIPT: ${payload.text}`;
+                }
+
+                if (payload?.type === 'assistant_reply' && typeof payload.text === 'string') {
+                    replyStatus.textContent = `REPLY: ${payload.text}`;
+                }
+
+                if (payload?.type === 'error') {
+                    const message = typeof payload.message === 'string' ? payload.message : 'Unknown error';
+                    showError(message);
+                }
+            };
+            socket.onclose = () => {
+                wsIndicator.textContent = "WS: RETRYING...";
+                wsIndicator.style.color = "#ff4d00";
+                setStatusMessage("Connection lost, retrying...");
+                setTimeout(connectWebSocket, 2000);
+            };
+            socket.onerror = () => {
+                wsIndicator.textContent = "WS: ERROR";
+                wsIndicator.style.color = "#ff4d00";
+            };
+        }
+        clearError();
+        connectWebSocket();
+    </script>
+</body>
+
+</html>

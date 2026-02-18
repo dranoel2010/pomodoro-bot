@@ -7,6 +7,7 @@ Current runtime pipeline:
 - transcription (`faster-whisper`)
 - optional local LLM response (`llm`)
 - optional TTS playback (`tts`)
+- built-in UI server (`server`) serving `web_ui/index.html` + websocket updates
 
 ## Project layout
 
@@ -14,6 +15,9 @@ Current runtime pipeline:
 - `src/stt/`: wake-word capture + STT foundation. See `src/stt/README.md`.
 - `src/llm/`: local LLM config/download/backend/parser/service. See `src/llm/README.md`.
 - `src/tts/`: TTS model loading + playback service. See `src/tts/README.md`.
+- `src/oracle/`: optional environment context providers (sensors + calendar).
+- `src/server/`: static UI + websocket server runtime.
+- `web_ui/`: browser UI (`index.html`) served by `src/server`.
 - `src/audio-diagnostic.py`: VAD tuning utility.
 - `setup.sh`: uv-based env bootstrap.
 - `build.sh`: one-file build script (PyInstaller).
@@ -82,6 +86,25 @@ export LLM_HF_REPO_ID="Qwen/Qwen2.5-3B-Instruct-GGUF"
 # export LLM_HF_REVISION="main"
 # export HF_TOKEN="..."
 # export ENABLE_LLM="true"   # optional explicit switch
+# export LLM_SYSTEM_PROMPT="/absolute/path/to/system_prompt.md"
+
+# Oracle integrations (optional environment context for LLM)
+# export ORACLE_ENABLED="true"
+# export ORACLE_ENS160_ENABLED="false"
+# export ORACLE_TEMT6000_ENABLED="false"
+# export ORACLE_GOOGLE_CALENDAR_ENABLED="false"
+# export ORACLE_GOOGLE_CALENDAR_ID="primary"
+# export ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE="/absolute/path/to/service-account.json"
+# export ORACLE_GOOGLE_CALENDAR_MAX_RESULTS="5"
+# export ORACLE_SENSOR_CACHE_TTL_SECONDS="15"
+# export ORACLE_CALENDAR_CACHE_TTL_SECONDS="60"
+
+# UI server (optional; enabled by default)
+# export UI_SERVER_ENABLED="true"
+# export UI_SERVER_HOST="127.0.0.1"
+# export UI_SERVER_PORT="8765"
+# export UI_SERVER_WS_PATH="/ws"
+# export UI_SERVER_INDEX_FILE="/absolute/path/to/web_ui/index.html"
 ```
 
 ## Run
@@ -91,9 +114,21 @@ source .env
 uv run python src/main.py
 ```
 
+Then open the UI at:
+
+```text
+http://127.0.0.1:8765
+```
+
 ## Diagnostics
 
 ```bash
 source .env
 uv run python src/audio-diagnostic.py
 ```
+
+## Optional Oracle Dependencies
+
+- Google Calendar: `google-auth`, `google-api-python-client`
+- ENS160 sensor: `adafruit-blinka`, `adafruit-circuitpython-ens160`
+- TEMT6000 via ADS1115: `Adafruit_ADS1x15`

@@ -4,10 +4,16 @@ version = "0.1.0"
 description = "Voice-driven wake-word + speech-to-text prototype."
 requires-python = ">=3.11"
 dependencies = [
+  "Adafruit-ADS1x15>=1.0.2",
+  "adafruit-blinka>=8.0.0",
+  "adafruit-circuitpython-ens160>=1.0.8",
   "coqui-tts[codec,languages]>=0.27.5",
   "faster-whisper",
+  "google-api-python-client>=2.0.0",
+  "google-auth>=2.0.0",
   "huggingface-hub>=0.36.2",
   "llama-cpp-python>=0.3.16",
+  "numpy>=1.26.0",
   "pvporcupine",
   "pvrecorder",
   "pyinstaller",
@@ -16,6 +22,7 @@ dependencies = [
   "torchaudio>=2.10.0",
   "transformers<5",
   "typing-extensions",
+  "websockets>=15.0.1",
 ]
 
 [tool.uv]

@@ -1,3 +1,5 @@
+import logging
+import os
 from typing import Optional
 
 from .config import LLMConfig
@@ -8,6 +10,7 @@ from .types import EnvironmentContext, StructuredResponse
 
 class PomodoroAssistantLLM:
     def __init__(self, config: LLMConfig):
+        self._logger = logging.getLogger(__name__)
         self._backend = LlamaBackend(config)
         self._parser = ResponseParser()
         self._system_message = self._build_system_message()
@@ -39,6 +42,27 @@ class PomodoroAssistantLLM:
         )
 
     def _build_system_message(self) -> str:
+        path = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
+        if not path:
+            return self._default_system_message()
+
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                content = file.read().strip()
+            if content:
+                return content
+            self._logger.warning("LLM_SYSTEM_PROMPT file is empty: %s", path)
+        except OSError as error:
+            self._logger.warning(
+                "Failed to read LLM_SYSTEM_PROMPT=%s (%s). Falling back to default.",
+                path,
+                error,
+            )
+
+        return self._default_system_message()
+
+    @staticmethod
+    def _default_system_message() -> str:
         return (
             "You are a desktop voice assistant.\n"
             "You MUST respond with ONLY valid JSON matching this schema exactly:\n"

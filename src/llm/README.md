@@ -38,8 +38,10 @@ Runtime tuning:
 - `LLM_REPEAT_PENALTY` (default `1.1`)
 - `LLM_VERBOSE` (`true`/`false`)
 - `ENABLE_LLM` optional explicit enable switch.
+- `LLM_SYSTEM_PROMPT` optional path to a custom system prompt file.
 
 ## Integration
 
 `src/main.py` sends transcribed utterance text to `PomodoroAssistantLLM` and optionally speaks `assistant_text` via `tts`.
+When oracle integrations are enabled, `main.py` also passes `EnvironmentContext` (air quality, light level, upcoming events) to the LLM.
 Tool call execution is intentionally skipped for now.
