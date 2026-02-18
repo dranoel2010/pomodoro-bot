@@ -21,14 +21,14 @@ model_size = "small"
 vad_filter = true
 
 [tts]
-enabled = false
+enabled = true
 config_path = "models/tts/thorsten_vits/config.json"
 gpu = false
 model_path = "models/tts/thorsten_vits/model_file.pth"
 # output_device = 0
 
 [llm]
-enabled = false
+enabled = true
 hf_filename = "Qwen2.5-3B-Instruct-Q4_K_M.gguf"
 hf_repo_id = "Qwen/Qwen2.5-3B-Instruct-GGUF"
 hf_revision = "main"

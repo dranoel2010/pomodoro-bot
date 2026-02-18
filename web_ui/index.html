@@ -218,10 +218,86 @@
         .status-display {
             position: absolute;
             top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             text-align: center;
             color: var(--glow-color);
             letter-spacing: 2px;
             text-shadow: 0 0 5px var(--glow-color);
+            z-index: 20;
+        }
+
+        .status-title {
+            font-size: 2rem;
+            letter-spacing: 4px;
+            line-height: 1;
+        }
+
+        .status-label {
+            display: inline-block;
+            margin-top: 26px;
+            padding: 3px 10px;
+            border: 1px solid var(--glow-color);
+            border-radius: 999px;
+            background: rgba(0, 242, 255, 0.08);
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: inset 0 0 8px rgba(0, 242, 255, 0.2);
+        }
+
+        .connection-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            text-align: left;
+            color: var(--glow-color);
+            text-shadow: 0 0 5px var(--glow-color);
+            z-index: 20;
+        }
+
+        .connection-line {
+            font-size: 0.7rem;
+            margin-top: 5px;
+            max-width: min(45vw, 460px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .connection-line.muted {
+            opacity: 0.7;
+        }
+
+        .connection-line.ws {
+            opacity: 0.9;
+            color: #ff4d00;
+        }
+
+        .conversation-display {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(92vw, 1000px);
+            text-align: center;
+            color: var(--glow-color);
+            text-shadow: 0 0 5px var(--glow-color);
+            z-index: 20;
+        }
+
+        .conversation-line {
+            font-size: 0.7rem;
+            opacity: 0.85;
+            margin-top: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .conversation-line.error {
+            opacity: 0.95;
+            color: #ff4d00;
         }
 
         .control-group-title {
@@ -234,20 +310,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 
-<body class="light-dark aq-good">
+    <body class="light-dark aq-good">
 
     <div class="status-display">
-        <div id="main-status">J.A.R.V.I.S. IDLE</div>
-        <div id="env-status" style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px;">Listening for events</div>
-        <div id="ws-indicator" style="font-size: 0.7rem; opacity: 0.9; margin-top: 5px; color: #ff4d00;">WS:
-            DISCONNECTED</div>
-        <div id="last-transcript" style="font-size: 0.7rem; opacity: 0.85; margin-top: 8px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <div class="status-title">J.A.R.V.I.S.</div>
+        <div id="main-status" class="status-label">IDLE</div>
+    </div>
+
+    <div class="connection-display">
+        <div id="env-status" class="connection-line muted">Listening for events</div>
+        <div id="ws-indicator" class="connection-line ws">WS: DISCONNECTED</div>
+    </div>
+
+    <div class="conversation-display">
+        <div id="last-transcript" class="conversation-line">
             TRANSCRIPT: -
         </div>
-        <div id="last-reply" style="font-size: 0.7rem; opacity: 0.85; margin-top: 4px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <div id="last-reply" class="conversation-line">
             REPLY: -
         </div>
-        <div id="last-error" style="display: none; font-size: 0.7rem; opacity: 0.95; margin-top: 4px; color: #ff4d00; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+        <div id="last-error" class="conversation-line error" style="display: none;"></div>
     </div>
 
     <div class="container state-idle" id="jarvis-container">
@@ -316,7 +398,7 @@
                 'replying': 'REPLYING',
                 'error': 'ERROR'
             };
-            mainStatus.textContent = `J.A.R.V.I.S. ${labelMap[state] || state.toUpperCase()}`;
+            mainStatus.textContent = labelMap[state] || state.toUpperCase();
         }
 
         function setStatusMessage(message) {
