@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,35 +60,5 @@ class UIServerConfig:
             host=settings.host,
             port=settings.port,
             websocket_path=settings.ws_path,
-            index_file=index_file,
-        )
-
-    @classmethod
-    def from_environment(cls) -> "UIServerConfig":
-        enabled = os.getenv("UI_SERVER_ENABLED", "true").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
-        host = os.getenv("UI_SERVER_HOST", "127.0.0.1").strip()
-        port_raw = os.getenv("UI_SERVER_PORT", "8765").strip()
-        ws_path = os.getenv("UI_SERVER_WS_PATH", "/ws").strip()
-        index_file = os.getenv("UI_SERVER_INDEX_FILE", "").strip()
-
-        try:
-            port = int(port_raw)
-        except ValueError as error:
-            raise ServerConfigurationError(
-                f"UI_SERVER_PORT must be an integer, got: {port_raw}"
-            ) from error
-
-        if not index_file:
-            index_file = str(_default_index_file())
-
-        return cls(
-            enabled=enabled,
-            host=host,
-            port=port,
-            websocket_path=ws_path,
             index_file=index_file,
         )

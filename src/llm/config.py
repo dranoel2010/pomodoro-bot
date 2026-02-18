@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -120,40 +119,6 @@ class LLMConfig:
             verbose=verbose,
         )
 
-    @classmethod
-    def from_environment(
-        cls,
-        *,
-        logger: Optional[logging.Logger] = None,
-    ) -> "LLMConfig":
-        logger = logger or logging.getLogger(__name__)
-        try:
-            n_threads = int(os.getenv("LLM_N_THREADS", "4"))
-            n_ctx = int(os.getenv("LLM_N_CTX", "2048"))
-            n_batch = int(os.getenv("LLM_N_BATCH", "256"))
-            temperature = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-            top_p = float(os.getenv("LLM_TOP_P", "0.9"))
-            repeat_penalty = float(os.getenv("LLM_REPEAT_PENALTY", "1.1"))
-        except ValueError as error:
-            raise ConfigurationError(f"Invalid LLM numeric setting: {error}") from error
-
-        return cls.from_sources(
-            model_dir=os.getenv("LLM_MODEL_PATH", "").strip(),
-            hf_filename=os.getenv("LLM_HF_FILENAME", "").strip(),
-            hf_repo_id=os.getenv("LLM_HF_REPO_ID", "").strip() or None,
-            hf_revision=os.getenv("LLM_HF_REVISION", "").strip() or None,
-            hf_token=os.getenv("HF_TOKEN", "").strip() or None,
-            system_prompt_path=os.getenv("LLM_SYSTEM_PROMPT", "").strip() or None,
-            n_threads=n_threads,
-            n_ctx=n_ctx,
-            n_batch=n_batch,
-            temperature=temperature,
-            top_p=top_p,
-            repeat_penalty=repeat_penalty,
-            verbose=os.getenv("LLM_VERBOSE", "false").lower() in ("true", "1", "yes"),
-            logger=logger,
-        )
-
     @staticmethod
     def _resolve_model_path_from_values(
         *,
@@ -218,17 +183,3 @@ class LLMConfig:
             raise ConfigurationError(
                 f"Failed to download model from {repo_id}: {e}"
             ) from e
-
-    @staticmethod
-    def _resolve_model_path(
-        *,
-        logger: Optional[logging.Logger] = None,
-    ) -> str:
-        return LLMConfig._resolve_model_path_from_values(
-            model_dir=os.getenv("LLM_MODEL_PATH", "").strip(),
-            filename=os.getenv("LLM_HF_FILENAME", "").strip(),
-            repo_id=os.getenv("LLM_HF_REPO_ID", "").strip() or None,
-            revision=os.getenv("LLM_HF_REVISION", "").strip() or None,
-            hf_token=os.getenv("HF_TOKEN", "").strip() or None,
-            logger=logger,
-        )

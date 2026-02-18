@@ -7,6 +7,7 @@ from pathlib import Path
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app_config import AppConfigurationError, load_app_config, resolve_config_path
 from server import ServerConfigurationError, UIServer, UIServerConfig
 
 
@@ -18,8 +19,9 @@ def main() -> int:
     logger = logging.getLogger("ui_server")
 
     try:
-        config = UIServerConfig.from_environment()
-    except ServerConfigurationError as error:
+        app_config = load_app_config(str(resolve_config_path()))
+        config = UIServerConfig.from_settings(app_config.ui_server)
+    except (AppConfigurationError, ServerConfigurationError) as error:
         logger.error("UI server configuration error: %s", error)
         return 1
 

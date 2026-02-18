@@ -154,11 +154,3 @@ class OracleContextService:
         except Exception as error:
             self._logger.warning("Failed to read Google Calendar data: %s", error)
             return self._calendar_cache
-
-    @classmethod
-    def from_environment(
-        cls,
-        logger: Optional[logging.Logger] = None,
-    ) -> "OracleContextService":
-        config = OracleConfig.from_environment()
-        return cls(config=config, logger=logger)

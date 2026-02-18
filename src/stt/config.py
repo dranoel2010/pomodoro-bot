@@ -83,74 +83,6 @@ class WakeWordConfig:
             validate_paths=settings.validate_paths,
         )
 
-    @classmethod
-    def from_environment(cls) -> "WakeWordConfig":
-        """Create configuration from environment variables.
-
-        Raises:
-            ConfigurationError: If required environment variables are missing or invalid.
-        """
-        pico_key = os.getenv("PICO_VOICE_ACCESS_KEY")
-        wake_word_ppn_file = os.getenv("PORCUPINE_PPN_FILE")
-        model_params_file = os.getenv("PORCUPINE_PV_FILE")
-
-        if not pico_key:
-            raise ConfigurationError(
-                "PICO_VOICE_ACCESS_KEY environment variable is required"
-            )
-        if not wake_word_ppn_file:
-            raise ConfigurationError(
-                "PORCUPINE_PPN_FILE environment variable is required"
-            )
-        if not model_params_file:
-            raise ConfigurationError(
-                "PORCUPINE_PV_FILE environment variable is required"
-            )
-
-        try:
-            device_index = int(os.getenv("WAKE_WORD_DEVICE_INDEX", "0"))
-            silence_timeout_seconds = float(
-                os.getenv("WAKE_WORD_SILENCE_TIMEOUT_SECONDS", "1.5")
-            )
-            max_utterance_seconds = float(
-                os.getenv("WAKE_WORD_MAX_UTTERANCE_SECONDS", "10.0")
-            )
-            no_speech_timeout_seconds = float(
-                os.getenv("WAKE_WORD_NO_SPEECH_TIMEOUT_SECONDS", "3.0")
-            )
-            min_speech_seconds = float(os.getenv("WAKE_WORD_MIN_SPEECH_SECONDS", "0.15"))
-            energy_threshold = float(os.getenv("WAKE_WORD_ENERGY_THRESHOLD", "100"))
-            noise_floor_calibration_seconds = float(
-                os.getenv("WAKE_WORD_NOISE_FLOOR_CALIBRATION_SECONDS", "1.0")
-            )
-            adaptive_threshold_multiplier = float(
-                os.getenv("WAKE_WORD_ADAPTIVE_THRESHOLD_MULTIPLIER", "1.5")
-            )
-            validate_paths = (
-                os.getenv("WAKE_WORD_VALIDATE_PATHS", "true").strip().lower()
-                == "true"
-            )
-        except ValueError as error:
-            raise ConfigurationError(
-                f"Invalid WAKE_WORD_* setting: {error}"
-            ) from error
-
-        return cls(
-            pico_voice_access_key=pico_key,
-            porcupine_wake_word_file=wake_word_ppn_file,
-            porcupine_model_params_file=model_params_file,
-            device_index=device_index,
-            silence_timeout_seconds=silence_timeout_seconds,
-            max_utterance_seconds=max_utterance_seconds,
-            no_speech_timeout_seconds=no_speech_timeout_seconds,
-            min_speech_seconds=min_speech_seconds,
-            energy_threshold=energy_threshold,
-            noise_floor_calibration_seconds=noise_floor_calibration_seconds,
-            adaptive_threshold_multiplier=adaptive_threshold_multiplier,
-            validate_paths=validate_paths,
-        )
-
-
 @dataclass(frozen=True)
 class STTConfig:
     model_size: str = "base"
@@ -169,40 +101,4 @@ class STTConfig:
             language=settings.language,
             beam_size=settings.beam_size,
             vad_filter=settings.vad_filter,
-        )
-
-    @classmethod
-    def from_environment(cls) -> "STTConfig":
-        """Create STT configuration from environment variables.
-
-        Raises:
-            ConfigurationError: If environment variables are invalid.
-        """
-        import os
-
-        # Handle language setting - support "auto" or "none" for auto-detection
-        language = os.getenv("WHISPER_LANGUAGE", "en")
-        if language.lower() in ("auto", "none", "null", ""):
-            language = None
-
-        # Parse beam_size with validation
-        beam_size_str = os.getenv("WHISPER_BEAM_SIZE", "5")
-        try:
-            beam_size = int(beam_size_str)
-            if beam_size < 1:
-                raise ConfigurationError(
-                    f"WHISPER_BEAM_SIZE must be >= 1, got: {beam_size}"
-                )
-        except ValueError:
-            raise ConfigurationError(
-                f"WHISPER_BEAM_SIZE must be an integer, got: {beam_size_str}"
-            )
-
-        return cls(
-            model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
-            device=os.getenv("WHISPER_DEVICE", "cpu"),
-            compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-            language=language,
-            beam_size=beam_size,
-            vad_filter=os.getenv("WHISPER_VAD_FILTER", "true").lower() == "true",
         )

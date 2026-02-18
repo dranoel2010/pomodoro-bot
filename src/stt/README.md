@@ -53,10 +53,19 @@ from stt import (
     UtteranceCapturedEvent,
     WakeWordErrorEvent,
 )
+from app_config import load_app_config, load_secret_config
 
+app_config = load_app_config()
+secrets = load_secret_config()
 event_queue = Queue()
 publisher = QueueEventPublisher(event_queue)
-service = WakeWordService(config=WakeWordConfig.from_environment(), publisher=publisher)
+service = WakeWordService(
+    config=WakeWordConfig.from_settings(
+        pico_voice_access_key=secrets.pico_voice_access_key,
+        settings=app_config.wake_word,
+    ),
+    publisher=publisher,
+)
 
 service.start()
 try:

@@ -2,13 +2,13 @@
 
 import logging
 import math
-import os
 import sys
 import time
 
 import pvporcupine
 from pvrecorder import PvRecorder
 
+from app_config import AppConfigurationError, load_app_config, load_secret_config, resolve_config_path
 from stt import WakeWordConfig, ConfigurationError
 
 
@@ -24,8 +24,13 @@ def main():
     logger = logging.getLogger(__name__)
 
     try:
-        config = WakeWordConfig.from_environment()
-    except ConfigurationError as e:
+        app_config = load_app_config(str(resolve_config_path()))
+        secret_config = load_secret_config()
+        config = WakeWordConfig.from_settings(
+            pico_voice_access_key=secret_config.pico_voice_access_key,
+            settings=app_config.wake_word,
+        )
+    except (AppConfigurationError, ConfigurationError) as e:
         print(f"Error: {e}")
         return 1
 
