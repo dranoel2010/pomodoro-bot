@@ -44,6 +44,7 @@ mkdir -p dist
   --clean -y \
   --onefile \
   --name main \
+  --add-data "config.toml:." \
   --add-data "web_ui/index.html:web_ui" \
   --collect-submodules TTS \
   src/main.py

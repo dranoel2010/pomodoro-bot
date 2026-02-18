@@ -52,6 +52,19 @@ class UIServerConfig:
                 )
 
     @classmethod
+    def from_settings(cls, settings) -> "UIServerConfig":
+        index_file = settings.index_file.strip() if settings.index_file else ""
+        if not index_file:
+            index_file = str(_default_index_file())
+        return cls(
+            enabled=bool(settings.enabled),
+            host=settings.host,
+            port=settings.port,
+            websocket_path=settings.ws_path,
+            index_file=index_file,
+        )
+
+    @classmethod
     def from_environment(cls) -> "UIServerConfig":
         enabled = os.getenv("UI_SERVER_ENABLED", "true").lower() in (
             "true",

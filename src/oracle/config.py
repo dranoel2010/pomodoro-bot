@@ -64,6 +64,36 @@ class OracleConfig:
             raise ValueError("ORACLE_CALENDAR_CACHE_TTL_SECONDS must be >= 0")
 
     @classmethod
+    def from_settings(
+        cls,
+        settings,
+        *,
+        calendar_id: str | None = None,
+        calendar_service_account_file: str | None = None,
+    ) -> "OracleConfig":
+        return cls(
+            enabled=bool(settings.enabled),
+            ens160_enabled=bool(settings.ens160_enabled),
+            temt6000_enabled=bool(settings.temt6000_enabled),
+            calendar_enabled=bool(settings.google_calendar_enabled),
+            ens160_temperature_compensation_c=float(
+                settings.ens160_temperature_compensation_c
+            ),
+            ens160_humidity_compensation_pct=float(
+                settings.ens160_humidity_compensation_pct
+            ),
+            temt6000_channel=int(settings.temt6000_channel),
+            temt6000_gain=int(settings.temt6000_gain),
+            temt6000_adc_address=int(settings.temt6000_adc_address),
+            temt6000_busnum=int(settings.temt6000_busnum),
+            calendar_id=(calendar_id or "").strip(),
+            calendar_service_account_file=(calendar_service_account_file or "").strip(),
+            calendar_max_results=int(settings.google_calendar_max_results),
+            sensor_cache_ttl_seconds=float(settings.sensor_cache_ttl_seconds),
+            calendar_cache_ttl_seconds=float(settings.calendar_cache_ttl_seconds),
+        )
+
+    @classmethod
     def from_environment(cls) -> "OracleConfig":
         calendar_id = os.getenv("ORACLE_GOOGLE_CALENDAR_ID", "").strip()
         service_account_file = os.getenv(

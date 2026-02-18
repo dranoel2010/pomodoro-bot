@@ -11,6 +11,7 @@ from .types import EnvironmentContext, StructuredResponse
 class PomodoroAssistantLLM:
     def __init__(self, config: LLMConfig):
         self._logger = logging.getLogger(__name__)
+        self._config = config
         self._backend = LlamaBackend(config)
         self._parser = ResponseParser()
         self._system_message = self._build_system_message()
@@ -42,7 +43,9 @@ class PomodoroAssistantLLM:
         )
 
     def _build_system_message(self) -> str:
-        path = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
+        path = (self._config.system_prompt_path or "").strip()
+        if not path:
+            path = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
         if not path:
             return self._default_system_message()
 

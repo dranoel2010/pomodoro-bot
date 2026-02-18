@@ -62,6 +62,28 @@ class WakeWordConfig:
             raise ConfigurationError("adaptive_threshold_multiplier must be positive")
 
     @classmethod
+    def from_settings(
+        cls,
+        *,
+        pico_voice_access_key: str,
+        settings,
+    ) -> "WakeWordConfig":
+        return cls(
+            pico_voice_access_key=pico_voice_access_key,
+            porcupine_wake_word_file=settings.ppn_file,
+            porcupine_model_params_file=settings.pv_file,
+            device_index=settings.device_index,
+            silence_timeout_seconds=settings.silence_timeout_seconds,
+            max_utterance_seconds=settings.max_utterance_seconds,
+            no_speech_timeout_seconds=settings.no_speech_timeout_seconds,
+            min_speech_seconds=settings.min_speech_seconds,
+            energy_threshold=settings.energy_threshold,
+            noise_floor_calibration_seconds=settings.noise_floor_calibration_seconds,
+            adaptive_threshold_multiplier=settings.adaptive_threshold_multiplier,
+            validate_paths=settings.validate_paths,
+        )
+
+    @classmethod
     def from_environment(cls) -> "WakeWordConfig":
         """Create configuration from environment variables.
 
@@ -85,10 +107,47 @@ class WakeWordConfig:
                 "PORCUPINE_PV_FILE environment variable is required"
             )
 
+        try:
+            device_index = int(os.getenv("WAKE_WORD_DEVICE_INDEX", "0"))
+            silence_timeout_seconds = float(
+                os.getenv("WAKE_WORD_SILENCE_TIMEOUT_SECONDS", "1.5")
+            )
+            max_utterance_seconds = float(
+                os.getenv("WAKE_WORD_MAX_UTTERANCE_SECONDS", "10.0")
+            )
+            no_speech_timeout_seconds = float(
+                os.getenv("WAKE_WORD_NO_SPEECH_TIMEOUT_SECONDS", "3.0")
+            )
+            min_speech_seconds = float(os.getenv("WAKE_WORD_MIN_SPEECH_SECONDS", "0.15"))
+            energy_threshold = float(os.getenv("WAKE_WORD_ENERGY_THRESHOLD", "100"))
+            noise_floor_calibration_seconds = float(
+                os.getenv("WAKE_WORD_NOISE_FLOOR_CALIBRATION_SECONDS", "1.0")
+            )
+            adaptive_threshold_multiplier = float(
+                os.getenv("WAKE_WORD_ADAPTIVE_THRESHOLD_MULTIPLIER", "1.5")
+            )
+            validate_paths = (
+                os.getenv("WAKE_WORD_VALIDATE_PATHS", "true").strip().lower()
+                == "true"
+            )
+        except ValueError as error:
+            raise ConfigurationError(
+                f"Invalid WAKE_WORD_* setting: {error}"
+            ) from error
+
         return cls(
             pico_voice_access_key=pico_key,
             porcupine_wake_word_file=wake_word_ppn_file,
             porcupine_model_params_file=model_params_file,
+            device_index=device_index,
+            silence_timeout_seconds=silence_timeout_seconds,
+            max_utterance_seconds=max_utterance_seconds,
+            no_speech_timeout_seconds=no_speech_timeout_seconds,
+            min_speech_seconds=min_speech_seconds,
+            energy_threshold=energy_threshold,
+            noise_floor_calibration_seconds=noise_floor_calibration_seconds,
+            adaptive_threshold_multiplier=adaptive_threshold_multiplier,
+            validate_paths=validate_paths,
         )
 
 
@@ -100,6 +159,17 @@ class STTConfig:
     language: Optional[str] = "en"
     beam_size: int = 5
     vad_filter: bool = True
+
+    @classmethod
+    def from_settings(cls, settings) -> "STTConfig":
+        return cls(
+            model_size=settings.model_size,
+            device=settings.device,
+            compute_type=settings.compute_type,
+            language=settings.language,
+            beam_size=settings.beam_size,
+            vad_filter=settings.vad_filter,
+        )
 
     @classmethod
     def from_environment(cls) -> "STTConfig":

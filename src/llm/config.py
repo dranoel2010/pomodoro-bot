@@ -20,6 +20,7 @@ class LLMConfig:
     """Configuration for LLM inference."""
 
     model_path: str
+    system_prompt_path: Optional[str] = None
     n_threads: int = 4
     n_ctx: int = 2048
     n_batch: int = 256
@@ -76,92 +77,40 @@ class LLMConfig:
             )
 
     @classmethod
-    def from_environment(
+    def from_sources(
         cls,
         *,
+        model_dir: str,
+        hf_filename: str,
+        hf_repo_id: Optional[str] = None,
+        hf_revision: Optional[str] = None,
+        hf_token: Optional[str] = None,
+        system_prompt_path: Optional[str] = None,
+        n_threads: int = 4,
+        n_ctx: int = 2048,
+        n_batch: int = 256,
+        temperature: float = 0.2,
+        top_p: float = 0.9,
+        repeat_penalty: float = 1.1,
+        verbose: bool = False,
         logger: Optional[logging.Logger] = None,
     ) -> "LLMConfig":
-        """Load configuration from environment variables.
-
-        Required environment variables:
-            - LLM_MODEL_PATH: Directory to store model files
-            - LLM_HF_FILENAME: Model filename (e.g., "model.gguf")
-            - LLM_HF_REPO_ID: Hugging Face repo (if model needs downloading)
-
-        Optional environment variables:
-            - LLM_HF_REVISION: Git revision/tag (default: main)
-            - HF_TOKEN: Hugging Face API token
-            - LLM_N_THREADS: Number of CPU threads (default: 4)
-            - LLM_N_CTX: Context window size (default: 2048)
-            - LLM_N_BATCH: Batch size (default: 256)
-            - LLM_TEMPERATURE: Sampling temperature (default: 0.2)
-            - LLM_TOP_P: Nucleus sampling (default: 0.9)
-            - LLM_REPEAT_PENALTY: Repetition penalty (default: 1.1)
-            - LLM_VERBOSE: Enable verbose output (default: false)
-
-        Args:
-            logger: Optional logger for diagnostics
-
-        Returns:
-            Validated LLMConfig instance
-
-        Raises:
-            ConfigurationError: If configuration is invalid or incomplete
-        """
         logger = logger or logging.getLogger(__name__)
-
         try:
-            model_path = cls._resolve_model_path(logger=logger)
+            model_path = cls._resolve_model_path_from_values(
+                model_dir=model_dir,
+                filename=hf_filename,
+                repo_id=hf_repo_id,
+                revision=hf_revision,
+                hf_token=hf_token,
+                logger=logger,
+            )
         except (ValueError, ModelDownloadError) as e:
             raise ConfigurationError(f"Failed to resolve model path: {e}") from e
 
-        # Parse numeric values with error handling
-        try:
-            n_threads = int(os.getenv("LLM_N_THREADS", "4"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_N_THREADS must be an integer, got: {os.getenv('LLM_N_THREADS')}"
-            ) from e
-
-        try:
-            n_ctx = int(os.getenv("LLM_N_CTX", "2048"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_N_CTX must be an integer, got: {os.getenv('LLM_N_CTX')}"
-            ) from e
-
-        try:
-            n_batch = int(os.getenv("LLM_N_BATCH", "256"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_N_BATCH must be an integer, got: {os.getenv('LLM_N_BATCH')}"
-            ) from e
-
-        try:
-            temperature = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_TEMPERATURE must be a number, got: {os.getenv('LLM_TEMPERATURE')}"
-            ) from e
-
-        try:
-            top_p = float(os.getenv("LLM_TOP_P", "0.9"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_TOP_P must be a number, got: {os.getenv('LLM_TOP_P')}"
-            ) from e
-
-        try:
-            repeat_penalty = float(os.getenv("LLM_REPEAT_PENALTY", "1.1"))
-        except ValueError as e:
-            raise ConfigurationError(
-                f"LLM_REPEAT_PENALTY must be a number, got: {os.getenv('LLM_REPEAT_PENALTY')}"
-            ) from e
-
-        verbose = os.getenv("LLM_VERBOSE", "false").lower() in ("true", "1", "yes")
-
         return cls(
             model_path=model_path,
+            system_prompt_path=(system_prompt_path or "").strip() or None,
             n_threads=n_threads,
             n_ctx=n_ctx,
             n_batch=n_batch,
@@ -171,56 +120,75 @@ class LLMConfig:
             verbose=verbose,
         )
 
-    @staticmethod
-    def _resolve_model_path(
+    @classmethod
+    def from_environment(
+        cls,
         *,
         logger: Optional[logging.Logger] = None,
+    ) -> "LLMConfig":
+        logger = logger or logging.getLogger(__name__)
+        try:
+            n_threads = int(os.getenv("LLM_N_THREADS", "4"))
+            n_ctx = int(os.getenv("LLM_N_CTX", "2048"))
+            n_batch = int(os.getenv("LLM_N_BATCH", "256"))
+            temperature = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+            top_p = float(os.getenv("LLM_TOP_P", "0.9"))
+            repeat_penalty = float(os.getenv("LLM_REPEAT_PENALTY", "1.1"))
+        except ValueError as error:
+            raise ConfigurationError(f"Invalid LLM numeric setting: {error}") from error
+
+        return cls.from_sources(
+            model_dir=os.getenv("LLM_MODEL_PATH", "").strip(),
+            hf_filename=os.getenv("LLM_HF_FILENAME", "").strip(),
+            hf_repo_id=os.getenv("LLM_HF_REPO_ID", "").strip() or None,
+            hf_revision=os.getenv("LLM_HF_REVISION", "").strip() or None,
+            hf_token=os.getenv("HF_TOKEN", "").strip() or None,
+            system_prompt_path=os.getenv("LLM_SYSTEM_PROMPT", "").strip() or None,
+            n_threads=n_threads,
+            n_ctx=n_ctx,
+            n_batch=n_batch,
+            temperature=temperature,
+            top_p=top_p,
+            repeat_penalty=repeat_penalty,
+            verbose=os.getenv("LLM_VERBOSE", "false").lower() in ("true", "1", "yes"),
+            logger=logger,
+        )
+
+    @staticmethod
+    def _resolve_model_path_from_values(
+        *,
+        model_dir: str,
+        filename: str,
+        repo_id: Optional[str],
+        revision: Optional[str],
+        hf_token: Optional[str],
+        logger: Optional[logging.Logger] = None,
     ) -> str:
-        """Resolve model path, downloading from HF if necessary.
-
-        Args:
-            logger: Optional logger for diagnostics
-
-        Returns:
-            Absolute path to validated model file
-
-        Raises:
-            ConfigurationError: If required env vars missing
-            ModelDownloadError: If download fails
-        """
         logger = logger or logging.getLogger(__name__)
 
-        # Get required variables
-        model_dir_str = os.getenv("LLM_MODEL_PATH", "").strip()
+        model_dir_str = model_dir.strip()
         if not model_dir_str:
             raise ConfigurationError(
-                "LLM_MODEL_PATH is required and must point to a directory"
+                "model_dir is required and must point to a directory"
             )
 
-        filename = os.getenv("LLM_HF_FILENAME", "").strip()
+        filename = filename.strip()
         if not filename:
-            raise ConfigurationError("LLM_HF_FILENAME is required")
+            raise ConfigurationError("hf_filename is required")
 
         if not filename.endswith(".gguf"):
             raise ConfigurationError(
-                f"LLM_HF_FILENAME must be a .gguf file, got: {filename}"
+                f"hf_filename must be a .gguf file, got: {filename}"
             )
 
-        # Validate model directory
-        model_dir = Path(model_dir_str)
+        model_dir_path = Path(model_dir_str)
 
-        # Get HF download parameters
-        repo_id = os.getenv("LLM_HF_REPO_ID", "").strip() or None
-        revision = os.getenv("LLM_HF_REVISION", "").strip() or None
-        hf_token = os.getenv("HF_TOKEN", "").strip() or None
-
-        # If no repo_id, expect file to already exist
         if not repo_id:
-            target_path = model_dir / filename
+            target_path = model_dir_path / filename
             if not target_path.exists():
                 raise ConfigurationError(
                     f"Model file not found: {target_path}\n"
-                    f"Either place the file there manually or set LLM_HF_REPO_ID "
+                    f"Either place the file there manually or set hf_repo_id "
                     f"to download it automatically."
                 )
             if not target_path.is_file():
@@ -231,9 +199,7 @@ class LLMConfig:
             logger.info(f"Using existing model: {target_path}")
             return str(target_path.absolute())
 
-        # Download/validate model using model_store
         logger.info(f"Ensuring model is available: {repo_id}/{filename}")
-
         spec = HFModelSpec(
             repo_id=repo_id,
             filename=filename,
@@ -243,7 +209,7 @@ class LLMConfig:
         try:
             resolved_path = ensure_model_downloaded(
                 spec,
-                models_dir=model_dir,
+                models_dir=model_dir_path,
                 hf_token=hf_token,
                 logger=logger,
             )
@@ -252,3 +218,17 @@ class LLMConfig:
             raise ConfigurationError(
                 f"Failed to download model from {repo_id}: {e}"
             ) from e
+
+    @staticmethod
+    def _resolve_model_path(
+        *,
+        logger: Optional[logging.Logger] = None,
+    ) -> str:
+        return LLMConfig._resolve_model_path_from_values(
+            model_dir=os.getenv("LLM_MODEL_PATH", "").strip(),
+            filename=os.getenv("LLM_HF_FILENAME", "").strip(),
+            repo_id=os.getenv("LLM_HF_REPO_ID", "").strip() or None,
+            revision=os.getenv("LLM_HF_REVISION", "").strip() or None,
+            hf_token=os.getenv("HF_TOKEN", "").strip() or None,
+            logger=logger,
+        )

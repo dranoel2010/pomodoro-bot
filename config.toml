@@ -1,0 +1,65 @@
+[wake_word]
+ppn_file = "models/sst/hey-pomo.ppn"
+pv_file = "models/sst/porcupine_params_de.pv"
+
+adaptive_threshold_multiplier = 1.5
+device_index = 0
+energy_threshold = 100
+max_utterance_seconds = 10.0
+min_speech_seconds = 0.15
+no_speech_timeout_seconds = 3.0
+noise_floor_calibration_seconds = 1.0
+silence_timeout_seconds = 1.5
+validate_paths = true
+
+[stt]
+beam_size = 5
+compute_type = "int8"
+device = "cpu"
+language = "de"
+model_size = "small"
+vad_filter = true
+
+[tts]
+enabled = false
+config_path = "models/tts/thorsten_vits/config.json"
+gpu = false
+model_path = "models/tts/thorsten_vits/model_file.pth"
+# output_device = 0
+
+[llm]
+enabled = false
+hf_filename = "Qwen2.5-3B-Instruct-Q4_K_M.gguf"
+hf_repo_id = "Qwen/Qwen2.5-3B-Instruct-GGUF"
+hf_revision = "main"
+model_path = "models/llm/qwen2_5"
+n_batch = 256
+n_ctx = 2048
+n_threads = 4
+repeat_penalty = 1.1
+system_prompt = "system_prompt.md"
+temperature = 0.2
+top_p = 0.9
+verbose = false
+
+[ui_server]
+enabled = true
+host = "127.0.0.1"
+port = 8765
+ws_path = "/ws"
+# index_file = "web_ui/index.html"
+
+[oracle]
+calendar_cache_ttl_seconds = 60
+enabled = true
+ens160_enabled = false
+ens160_humidity_compensation_pct = 50
+ens160_temperature_compensation_c = 25
+google_calendar_enabled = false
+google_calendar_max_results = 5
+sensor_cache_ttl_seconds = 15
+temt6000_adc_address = "0x48"
+temt6000_busnum = 1
+temt6000_channel = 0
+temt6000_enabled = false
+temt6000_gain = 1

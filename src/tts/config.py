@@ -13,6 +13,23 @@ class TTSConfig:
     output_device_index: Optional[int] = None
 
     @classmethod
+    def from_settings(cls, settings) -> "TTSConfig":
+        model_path = settings.model_path
+        config_path = settings.config_path
+
+        if not model_path:
+            raise ConfigurationError("TTS model_path cannot be empty")
+        if not config_path:
+            raise ConfigurationError("TTS config_path cannot be empty")
+
+        return cls(
+            model_path=model_path,
+            config_path=config_path,
+            gpu=bool(settings.gpu),
+            output_device_index=settings.output_device,
+        )
+
+    @classmethod
     def from_environment(cls) -> "TTSConfig":
         model_path = os.getenv("TTS_MODEL_PATH", "")
         config_path = os.getenv("TTS_CONFIG_PATH", "")

@@ -1,5 +1,4 @@
 import logging
-import os
 import signal
 import sys
 import time
@@ -7,6 +6,12 @@ from datetime import datetime
 from queue import Empty, Queue
 from typing import Optional
 
+from app_config import (
+    AppConfigurationError,
+    load_app_config,
+    load_secret_config,
+    resolve_config_path,
+)
 from stt import (
     ConfigurationError,
     FasterWhisperSTT,
@@ -27,7 +32,7 @@ from tts import (
     TTSError,
 )
 from llm import EnvironmentContext, LLMConfig, PomodoroAssistantLLM
-from oracle import OracleContextService
+from oracle import OracleConfig, OracleContextService
 from server import ServerConfigurationError, UIServer, UIServerConfig
 
 
@@ -84,10 +89,23 @@ def main() -> int:
     """Run the wake word detection service."""
     logger = setup_logging(level=logging.INFO)
 
+    # Load typed app configuration and secrets.
+    try:
+        config_path = resolve_config_path()
+        app_config = load_app_config(str(config_path))
+        secret_config = load_secret_config()
+        logger.info("Loaded runtime config: %s", config_path)
+    except AppConfigurationError as error:
+        logger.error(f"App configuration error: {error}")
+        return 1
+
     # Load configurations
     try:
-        config = WakeWordConfig.from_environment()
-        stt_config = STTConfig.from_environment()
+        config = WakeWordConfig.from_settings(
+            pico_voice_access_key=secret_config.pico_voice_access_key,
+            settings=app_config.wake_word,
+        )
+        stt_config = STTConfig.from_settings(app_config.stt)
     except ConfigurationError as error:
         logger.error(f"Configuration error: {error}")
         return 1
@@ -110,9 +128,9 @@ def main() -> int:
 
     # Optional TTS service
     speech_service: Optional[SpeechService] = None
-    if os.getenv("TTS_ENABLED", "false").lower() == "true":
+    if app_config.tts.enabled:
         try:
-            tts_config = TTSConfig.from_environment()
+            tts_config = TTSConfig.from_settings(app_config.tts)
             tts_engine = CoquiTTSEngine(
                 config=tts_config,
                 logger=logging.getLogger("tts.engine"),
@@ -133,16 +151,25 @@ def main() -> int:
 
     # Optional LLM service
     assistant_llm: Optional[PomodoroAssistantLLM] = None
-    llm_requested = any(
-        (
-            os.getenv("LLM_MODEL_PATH", "").strip(),
-            os.getenv("LLM_HF_REPO_ID", "").strip(),
-            os.getenv("ENABLE_LLM", "false").lower() == "true",
-        )
-    )
+    llm_requested = app_config.llm.enabled
     if llm_requested:
         try:
-            llm_config = LLMConfig.from_environment()
+            llm_config = LLMConfig.from_sources(
+                model_dir=app_config.llm.model_path,
+                hf_filename=app_config.llm.hf_filename,
+                hf_repo_id=app_config.llm.hf_repo_id or None,
+                hf_revision=app_config.llm.hf_revision or None,
+                hf_token=secret_config.hf_token,
+                system_prompt_path=app_config.llm.system_prompt or None,
+                n_threads=app_config.llm.n_threads,
+                n_ctx=app_config.llm.n_ctx,
+                n_batch=app_config.llm.n_batch,
+                temperature=app_config.llm.temperature,
+                top_p=app_config.llm.top_p,
+                repeat_penalty=app_config.llm.repeat_penalty,
+                verbose=app_config.llm.verbose,
+                logger=logging.getLogger("llm.config"),
+            )
             assistant_llm = PomodoroAssistantLLM(llm_config)
             logger.info("LLM enabled (model: %s)", llm_config.model_path)
         except Exception as error:
@@ -150,14 +177,20 @@ def main() -> int:
             return 1
     elif speech_service:
         logger.warning(
-            "TTS is enabled but LLM_MODEL_PATH is not set; no spoken reply will be generated."
+            "TTS is enabled but LLM is disabled; no spoken reply will be generated."
         )
 
     # Optional oracle context providers (sensors/calendar) for LLM environment block
     oracle_service: Optional[OracleContextService] = None
     if assistant_llm:
         try:
-            oracle_service = OracleContextService.from_environment(
+            oracle_config = OracleConfig.from_settings(
+                app_config.oracle,
+                calendar_id=secret_config.oracle_google_calendar_id,
+                calendar_service_account_file=secret_config.oracle_google_service_account_file,
+            )
+            oracle_service = OracleContextService(
+                config=oracle_config,
                 logger=logging.getLogger("oracle")
             )
         except Exception as error:
@@ -187,7 +220,7 @@ def main() -> int:
     ui_server: Optional[UIServer] = None
     ui_server_config: Optional[UIServerConfig] = None
     try:
-        ui_server_config = UIServerConfig.from_environment()
+        ui_server_config = UIServerConfig.from_settings(app_config.ui_server)
     except ServerConfigurationError as error:
         logger.error(f"UI server configuration error: {error}")
         logger.warning("Continuing without UI server.")
