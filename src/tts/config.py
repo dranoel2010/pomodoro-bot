@@ -7,15 +7,15 @@ from wake_word import ConfigurationError
 
 @dataclass(frozen=True)
 class TTSConfig:
-    model_path: str = "thorsten_vits/model_file.pth"
-    config_path: str = "thorsten_vits/config.json"
+    model_path: str = ""
+    config_path: str = ""
     gpu: bool = False
     output_device_index: Optional[int] = None
 
     @classmethod
     def from_environment(cls) -> "TTSConfig":
-        model_path = os.getenv("TTS_MODEL_PATH", "thorsten_vits/model_file.pth")
-        config_path = os.getenv("TTS_CONFIG_PATH", "thorsten_vits/config.json")
+        model_path = os.getenv("TTS_MODEL_PATH", "")
+        config_path = os.getenv("TTS_CONFIG_PATH", "")
         gpu = os.getenv("TTS_GPU", "false").lower() == "true"
 
         output_device_index = None

@@ -7,6 +7,7 @@ dependencies = [
   "coqui-tts[codec,languages]>=0.27.5",
   "faster-whisper",
   "huggingface-hub>=0.36.2",
+  "llama-cpp-python>=0.3.16",
   "pvporcupine",
   "pvrecorder",
   "pyinstaller",

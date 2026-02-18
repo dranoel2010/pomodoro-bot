@@ -25,6 +25,7 @@ from tts import (
     TTSConfig,
     TTSError,
 )
+from llm import LLMConfig, PomodoroAssistantLLM
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
@@ -106,7 +107,7 @@ def main() -> int:
 
     # Optional TTS service
     speech_service: Optional[SpeechService] = None
-    if os.getenv("ENABLE_TTS", "false").lower() == "true":
+    if os.getenv("TTS_ENABLED", "false").lower() == "true":
         try:
             tts_config = TTSConfig.from_environment()
             tts_engine = CoquiTTSEngine(
@@ -126,6 +127,28 @@ def main() -> int:
         except (ConfigurationError, TTSError) as error:
             logger.error(f"TTS initialization error: {error}")
             return 1
+
+    # Optional LLM service
+    assistant_llm: Optional[PomodoroAssistantLLM] = None
+    llm_requested = any(
+        (
+            os.getenv("LLM_MODEL_PATH", "").strip(),
+            os.getenv("LLM_HF_REPO_ID", "").strip(),
+            os.getenv("ENABLE_LLM", "false").lower() == "true",
+        )
+    )
+    if llm_requested:
+        try:
+            llm_config = LLMConfig.from_environment()
+            assistant_llm = PomodoroAssistantLLM(llm_config)
+            logger.info("LLM enabled (model: %s)", llm_config.model_path)
+        except Exception as error:
+            logger.error(f"LLM initialization error: {error}")
+            return 1
+    elif speech_service:
+        logger.warning(
+            "TTS is enabled but LLM_MODEL_PATH is not set; no spoken reply will be generated."
+        )
 
     # Create wake word service
     event_queue: Queue = Queue()
@@ -189,11 +212,19 @@ def main() -> int:
                             else ""
                         )
                         print(f'\r  💬 "{result.text}"{confidence_str}\n')
-                        if speech_service:
+
+                        if assistant_llm:
                             try:
-                                speech_service.speak(result.text)
+                                llm_response = assistant_llm.run(result.text)
+                                assistant_text = llm_response["assistant_text"].strip()
+                                print(f'  🤖 "{assistant_text}"\n')
+                                # Tool handling intentionally skipped for now.
+                                if speech_service and assistant_text:
+                                    speech_service.speak(assistant_text)
                             except TTSError as error:
                                 logger.error(f"TTS playback failed: {error}")
+                            except Exception as error:
+                                logger.error(f"LLM processing failed: {error}")
                     else:
                         print("\r  ⚠️  No speech detected\n")
                 except STTError as error:

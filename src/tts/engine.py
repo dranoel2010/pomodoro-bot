@@ -43,8 +43,13 @@ class CoquiTTSEngine:
         if os.path.exists(model_path) and os.path.exists(config_path):
             return model_path, config_path
 
-        repo_id = os.getenv("TTS_HF_REPO_ID", "Thorsten-Voice/VITS")
-        local_dir = os.getenv("TTS_HF_LOCAL_DIR", "thorsten_vits")
+        repo_id = os.getenv("TTS_HF_REPO_ID", "")
+        local_dir = os.getenv("TTS_HF_LOCAL_DIR", "")
+        if not (repo_id or filename):
+            raise ValueError(
+                "LLM is missing configuration. Set either TTS_HF_LOCAL_DIR to an existing model "
+                "file, or set TTS_HF_REPO_ID to auto-download."
+            )
 
         self._logger.info(
             "TTS model files not found locally, downloading from %s into %s",
@@ -58,7 +63,9 @@ class CoquiTTSEngine:
                 local_dir_use_symlinks=False,
             )
         except Exception as error:
-            raise TTSError(f"Failed to download TTS model from Hugging Face: {error}") from error
+            raise TTSError(
+                f"Failed to download TTS model from Hugging Face: {error}"
+            ) from error
 
         resolved_model_path = os.path.join(local_dir, "model_file.pth")
         resolved_config_path = os.path.join(local_dir, "config.json")
