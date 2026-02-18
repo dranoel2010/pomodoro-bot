@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from wake_word import ConfigurationError
+from stt import ConfigurationError
 
 
 @dataclass(frozen=True)

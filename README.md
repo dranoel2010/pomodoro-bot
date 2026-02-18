@@ -13,7 +13,7 @@ Voice-driven wake-word + speech-to-text prototype using Picovoice Porcupine and 
 ## Project layout
 
 - `src/main.py`: CLI entrypoint, wiring, lifecycle, and event loop.
-- `src/wake_word/`: wake-word module (service, events, VAD, capture, STT).
+- `src/stt/`: wake-word module (service, events, VAD, capture, STT).
 - `src/audio-diagnostic.py`: diagnostic tool for tuning VAD thresholds.
 - `setup.sh`: virtualenv bootstrap + dependency install.
 
@@ -153,4 +153,4 @@ uv run python src/audio-diagnostic.py
 ## Notes
 
 - This is currently a wake-word + transcription foundation. Pomodoro session logic is not implemented yet.
-- The wake-word module is reusable and event-driven; see `src/wake_word/README.md`.
+- The wake-word module is reusable and event-driven; see `src/stt/README.md`.

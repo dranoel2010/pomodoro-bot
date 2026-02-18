@@ -9,7 +9,7 @@ import time
 import pvporcupine
 from pvrecorder import PvRecorder
 
-from wake_word import WakeWordConfig, ConfigurationError
+from stt import WakeWordConfig, ConfigurationError
 
 
 def setup_logging():

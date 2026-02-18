@@ -6,7 +6,7 @@ import time
 from queue import Empty, Queue
 from typing import Optional
 
-from wake_word import (
+from stt import (
     ConfigurationError,
     FasterWhisperSTT,
     QueueEventPublisher,

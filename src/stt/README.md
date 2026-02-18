@@ -1,4 +1,4 @@
-# wake_word module
+# stt module
 
 Reusable wake-word and utterance-capture module with queue/event-based integration points.
 
@@ -45,7 +45,7 @@ Reusable wake-word and utterance-capture module with queue/event-based integrati
 ```python
 from queue import Queue
 
-from wake_word import (
+from stt import (
     QueueEventPublisher,
     WakeWordConfig,
     WakeWordService,
