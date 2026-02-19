@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import mimetypes
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +37,9 @@ class UIServer:
         self._connected_clients: set[ServerConnection] = set()
         self._sticky_events: dict[str, str] = {}
         self._sticky_lock = threading.Lock()
-        self._index_html = Path(self._config.index_file).read_bytes()
+        self._index_file = Path(self._config.index_file).resolve()
+        self._ui_root = self._index_file.parent
+        self._index_html = self._index_file.read_bytes()
 
     @property
     def host(self) -> str:
@@ -236,6 +239,16 @@ class UIServer:
                 "text/plain; charset=utf-8",
             )
 
+        static_file = self._resolve_static_file(path)
+        if static_file is not None:
+            with contextlib.suppress(OSError):
+                return self._response(
+                    200,
+                    "OK",
+                    static_file.read_bytes(),
+                    self._guess_content_type(static_file),
+                )
+
         return self._response(
             404,
             "Not Found",
@@ -297,3 +310,33 @@ class UIServer:
         order = ("state_update", "pomodoro", "transcript", "assistant_reply", "error")
         with self._sticky_lock:
             return [self._sticky_events[key] for key in order if key in self._sticky_events]
+
+    def _resolve_static_file(self, request_path: str) -> Optional[Path]:
+        if not request_path or request_path == "/":
+            return None
+
+        relative = request_path.lstrip("/")
+        if not relative:
+            return None
+
+        candidate = (self._ui_root / relative).resolve()
+        if self._ui_root not in candidate.parents:
+            return None
+
+        if not candidate.is_file():
+            return None
+
+        return candidate
+
+    @staticmethod
+    def _guess_content_type(path: Path) -> str:
+        mime_type, _ = mimetypes.guess_type(str(path))
+        if not mime_type:
+            return "application/octet-stream"
+        if mime_type.startswith("text/") or mime_type in {
+            "application/javascript",
+            "application/json",
+            "application/xml",
+        }:
+            return f"{mime_type}; charset=utf-8"
+        return mime_type
