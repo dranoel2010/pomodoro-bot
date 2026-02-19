@@ -42,4 +42,4 @@ Secret via environment:
 
 `src/main.py` sends transcribed utterance text to `PomodoroAssistantLLM` and optionally speaks `assistant_text` via `tts`.
 When oracle integrations are enabled, `main.py` also passes `EnvironmentContext` (air quality, light level, upcoming events) to the LLM.
-Tool call execution is intentionally skipped for now.
+Tool calls are executed by the pomodoro runtime (`timer_start`, `timer_pause`, `timer_continue`, `timer_abort`) with legacy aliases (`timer_stop`, `timer_reset`) still accepted.

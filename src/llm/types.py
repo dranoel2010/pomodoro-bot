@@ -5,7 +5,15 @@ from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, TypedDict
 
 
-ToolName = Literal["timer_start", "timer_pause", "timer_stop", "timer_reset"]
+ToolName = Literal[
+    "timer_start",
+    "timer_pause",
+    "timer_continue",
+    "timer_abort",
+    # Backward-compatible aliases:
+    "timer_stop",
+    "timer_reset",
+]
 
 
 class ToolCall(TypedDict):

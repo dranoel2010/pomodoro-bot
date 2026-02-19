@@ -4,7 +4,7 @@ import sys
 import time
 from datetime import datetime
 from queue import Empty, Queue
-from typing import Optional
+from typing import Any, Optional
 
 from app_config import (
     AppConfigurationError,
@@ -33,6 +33,7 @@ from tts import (
 )
 from llm import EnvironmentContext, LLMConfig, PomodoroAssistantLLM
 from oracle import OracleConfig, OracleContextService
+from pomodoro import PomodoroAction, PomodoroSnapshot, PomodoroTick, PomodoroTimer
 from server import ServerConfigurationError, UIServer, UIServerConfig
 
 
@@ -83,6 +84,40 @@ def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> b
         time.sleep(poll_interval)
 
     return service.is_ready
+
+
+TOOL_TO_POMODORO_ACTION: dict[str, PomodoroAction] = {
+    "timer_start": "start",
+    "timer_pause": "pause",
+    "timer_continue": "continue",
+    "timer_abort": "abort",
+    # Backward-compatible aliases:
+    "timer_stop": "abort",
+    "timer_reset": "reset",
+}
+
+
+def _format_duration(seconds: int) -> str:
+    minutes, remainder = divmod(max(0, int(seconds)), 60)
+    return f"{minutes:02d}:{remainder:02d}"
+
+
+def _pomodoro_status_message(snapshot: PomodoroSnapshot) -> str:
+    if snapshot.phase == "running":
+        return (
+            f"Pomodoro '{snapshot.session or 'Focus'}' running "
+            f"({_format_duration(snapshot.remaining_seconds)} left)"
+        )
+    if snapshot.phase == "paused":
+        return (
+            f"Pomodoro '{snapshot.session or 'Focus'}' paused "
+            f"({_format_duration(snapshot.remaining_seconds)} left)"
+        )
+    if snapshot.phase == "completed":
+        return f"Pomodoro '{snapshot.session or 'Focus'}' completed"
+    if snapshot.phase == "aborted":
+        return f"Pomodoro '{snapshot.session or 'Focus'}' aborted"
+    return "Listening for wake word"
 
 
 def main() -> int:
@@ -256,6 +291,114 @@ def main() -> int:
         if ui_server:
             ui_server.publish_state(state, message=message, **payload)
 
+    pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
+
+    def _default_motivation(action: str, snapshot: PomodoroSnapshot) -> str:
+        session = snapshot.session or "Focus"
+        if action == "start":
+            return f"Session '{session}' started. One task, one block."
+        if action == "continue":
+            return f"Session '{session}' resumed. Stay with the next small step."
+        if action == "pause":
+            return f"Session '{session}' paused. Take a breath, then continue."
+        if action == "abort":
+            return f"Session '{session}' aborted. Reset and start again when ready."
+        if action == "completed":
+            return f"Session '{session}' completed. Great consistency."
+        return f"Session '{session}' updated."
+
+    def publish_pomodoro_update(
+        snapshot: PomodoroSnapshot,
+        *,
+        action: str,
+        accepted: Optional[bool] = None,
+        reason: str = "",
+        tool_name: Optional[str] = None,
+        motivation: Optional[str] = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "action": action,
+            "phase": snapshot.phase,
+            "session": snapshot.session,
+            "duration_seconds": snapshot.duration_seconds,
+            "remaining_seconds": snapshot.remaining_seconds,
+        }
+        if accepted is not None:
+            payload["accepted"] = accepted
+        if reason:
+            payload["reason"] = reason
+        if tool_name:
+            payload["tool_name"] = tool_name
+        if motivation:
+            payload["motivation"] = motivation
+        publish_ui("pomodoro", **payload)
+
+    def handle_pomodoro_tool_call(tool_call: dict[str, Any], assistant_text: str) -> None:
+        tool_name = tool_call.get("name")
+        if not isinstance(tool_name, str):
+            return
+
+        action = TOOL_TO_POMODORO_ACTION.get(tool_name)
+        if action is None:
+            logger.warning("Unsupported pomodoro tool call: %s", tool_name)
+            return
+
+        raw_arguments = tool_call.get("arguments")
+        arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
+        raw_session = arguments.get("session")
+        session = raw_session if isinstance(raw_session, str) else None
+
+        result = pomodoro_timer.apply(action, session=session)
+        motivation = assistant_text.strip() or _default_motivation(
+            action if result.accepted else "update",
+            result.snapshot,
+        )
+        publish_pomodoro_update(
+            result.snapshot,
+            action=action,
+            accepted=result.accepted,
+            reason=result.reason,
+            tool_name=tool_name,
+            motivation=motivation,
+        )
+        publish_ui_state("idle", message=_pomodoro_status_message(result.snapshot))
+
+    def handle_pomodoro_tick(tick: PomodoroTick) -> None:
+        if tick.completed:
+            completion_message = _default_motivation("completed", tick.snapshot)
+            publish_pomodoro_update(
+                tick.snapshot,
+                action="completed",
+                accepted=True,
+                reason="completed",
+                motivation=completion_message,
+            )
+            publish_ui("assistant_reply", state="replying", text=completion_message)
+            publish_ui_state("idle", message=_pomodoro_status_message(tick.snapshot))
+            if speech_service:
+                try:
+                    speech_service.speak(completion_message)
+                except TTSError as error:
+                    logger.error("TTS completion playback failed: %s", error)
+            return
+
+        publish_pomodoro_update(
+            tick.snapshot,
+            action="tick",
+            accepted=True,
+            reason="tick",
+        )
+
+    def publish_idle_state() -> None:
+        publish_ui_state("idle", message=_pomodoro_status_message(pomodoro_timer.snapshot()))
+
+    publish_pomodoro_update(
+        pomodoro_timer.snapshot(),
+        action="sync",
+        accepted=True,
+        reason="startup",
+    )
+
     # Create wake word service
     event_queue: Queue = Queue()
     publisher = QueueEventPublisher(event_queue)
@@ -286,12 +429,16 @@ def main() -> int:
             return 1
 
         logger.info("Ready! Listening for wake word ...")
-        publish_ui_state("idle", message="Listening for wake word")
+        publish_idle_state()
 
         # Main event loop
         while True:
+            timer_tick = pomodoro_timer.poll()
+            if timer_tick is not None:
+                handle_pomodoro_tick(timer_tick)
+
             try:
-                event = event_queue.get(timeout=1.0)
+                event = event_queue.get(timeout=0.25)
             except Empty:
                 if not service.is_running:
                     logger.error("Service stopped unexpectedly")
@@ -354,13 +501,12 @@ def main() -> int:
                                     state="replying",
                                     text=assistant_text,
                                 )
-                                # Tool handling intentionally skipped for now.
+                                tool_call = llm_response.get("tool_call")
+                                if isinstance(tool_call, dict):
+                                    handle_pomodoro_tool_call(tool_call, assistant_text)
                                 if speech_service and assistant_text:
                                     speech_service.speak(assistant_text)
-                                publish_ui_state(
-                                    "idle",
-                                    message="Listening for wake word",
-                                )
+                                publish_idle_state()
                             except TTSError as error:
                                 logger.error(f"TTS playback failed: {error}")
                                 publish_ui(
@@ -370,7 +516,7 @@ def main() -> int:
                                 )
                                 publish_ui_state(
                                     "idle",
-                                    message="Listening for wake word",
+                                    message=_pomodoro_status_message(pomodoro_timer.snapshot()),
                                 )
                             except Exception as error:
                                 logger.error(f"LLM processing failed: {error}")
@@ -381,12 +527,12 @@ def main() -> int:
                                 )
                                 publish_ui_state(
                                     "idle",
-                                    message="Listening for wake word",
+                                    message=_pomodoro_status_message(pomodoro_timer.snapshot()),
                                 )
                         else:
                             publish_ui_state(
                                 "idle",
-                                message="Listening for wake word",
+                                message=_pomodoro_status_message(pomodoro_timer.snapshot()),
                             )
                     else:
                         print("\r  ⚠️  No speech detected\n")
@@ -398,7 +544,7 @@ def main() -> int:
                         state="error",
                         message=f"Transcription failed: {error}",
                     )
-                    publish_ui_state("idle", message="Listening for wake word")
+                    publish_idle_state()
 
             elif isinstance(event, WakeWordErrorEvent):
                 logger.error(

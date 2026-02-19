@@ -16,6 +16,7 @@ Current runtime pipeline:
 - `src/llm/`: local LLM config/download/backend/parser/service. See `src/llm/README.md`.
 - `src/tts/`: TTS model loading + playback service. See `src/tts/README.md`.
 - `src/oracle/`: optional environment context providers (sensors + calendar).
+- `src/pomodoro/`: pomodoro session runtime (`start/pause/continue/abort`) and countdown state.
 - `src/server/`: static UI + websocket server runtime.
 - `web_ui/`: browser UI (`index.html`) served by `src/server`.
 - `src/audio-diagnostic.py`: VAD tuning utility.

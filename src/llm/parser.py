@@ -22,7 +22,7 @@ class ResponseParser:
             return self._validate_and_normalize(parsed, user_prompt)
         except Exception:
             return {
-                "assistant_text": "I'm not fully sure what timer action you want. What should I do (start, pause, stop, or reset), and what session name?",
+                "assistant_text": "I'm not fully sure what timer action you want. What should I do (start, pause, continue, or abort), and what session name?",
                 "tool_call": None,
             }
 
@@ -65,7 +65,15 @@ class ResponseParser:
             raise ValueError("Invalid tool_call object.")
 
         name = tool_call["name"]
-        if name not in ("timer_start", "timer_pause", "timer_stop", "timer_reset"):
+        if name not in (
+            "timer_start",
+            "timer_pause",
+            "timer_continue",
+            "timer_abort",
+            # Backward-compatible aliases:
+            "timer_stop",
+            "timer_reset",
+        ):
             raise ValueError(f"Invalid tool name: {name}")
 
         args = tool_call["arguments"]
@@ -78,6 +86,7 @@ class ResponseParser:
         session = self._sanitize_session(session)
 
         self._last_session = session
+
         return {
             "assistant_text": assistant_text.strip(),
             "tool_call": {

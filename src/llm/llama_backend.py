@@ -10,7 +10,7 @@ toolcall ::= "null" | toolobj
 
 toolobj ::= "{" ws "\"name\"" ws ":" ws toolname ws "," ws "\"arguments\"" ws ":" ws argobj ws "}"
 
-toolname ::= "\"timer_start\"" | "\"timer_pause\"" | "\"timer_stop\"" | "\"timer_reset\""
+toolname ::= "\"timer_start\"" | "\"timer_pause\"" | "\"timer_continue\"" | "\"timer_abort\"" | "\"timer_stop\"" | "\"timer_reset\""
 
 argobj ::= "{" ws "\"session\"" ws ":" ws string ws "}"
 
