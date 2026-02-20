@@ -5,23 +5,24 @@ from .config import LLMConfig
 
 GBNF_SCHEMA = r"""
 root ::= "{" ws "\"assistant_text\"" ws ":" ws string ws "," ws "\"tool_call\"" ws ":" ws toolcall ws "}"
-
 toolcall ::= "null" | toolobj
-
 toolobj ::= "{" ws "\"name\"" ws ":" ws toolname ws "," ws "\"arguments\"" ws ":" ws argobj ws "}"
-
-toolname ::= "\"timer_start\"" | "\"timer_pause\"" | "\"timer_continue\"" | "\"timer_abort\"" | "\"timer_stop\"" | "\"timer_reset\""
-
-argobj ::= "{" ws "\"session\"" ws ":" ws string ws "}"
-
-string ::= "\"" chars "\""
-chars ::= (char)*
+toolname ::= "\"start_timer\"" | "\"stop_timer\"" | "\"pause_timer\"" | "\"continue_timer\"" | "\"reset_timer\"" | "\"start_pomodoro_session\"" | "\"stop_pomodoro_session\"" | "\"pause_pomodoro_session\"" | "\"continue_pomodoro_session\"" | "\"reset_pomodoro_session\""
+argobj ::= "{" ws "}" | "{" ws kv-list ws "}"
+kv-list ::= kv-pair | kv-pair ws "," ws kv-list
+kv-pair ::= string ws ":" ws value
+value ::= string | number | "null"
+string ::= "\"" (char)* "\""
 char ::= [^"\\] | escape
 escape ::= "\\" (["\\/bfnrt] | "u" hex hex hex hex)
 hex ::= [0-9a-fA-F]
-
+number ::= int frac? exp?
+int ::= "-"? ([0-9] | [1-9] (digit)*)
+frac ::= "." (digit)+
+exp ::= [eE] [-+]? (digit)+
+digit ::= [0-9]
 ws ::= ([ \t\n\r])*
-"""
+""".strip()
 
 
 class LlamaBackend:
