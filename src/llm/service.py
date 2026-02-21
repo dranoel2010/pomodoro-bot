@@ -14,7 +14,7 @@ class PomodoroAssistantLLM:
         self._config = config
         self._backend = LlamaBackend(config)
         self._parser = ResponseParser()
-        self._system_message = self._build_system_message()
+        self._system_prompt_template = self._build_system_message()
 
     @classmethod
     def from_model_path(
@@ -91,10 +91,8 @@ class PomodoroAssistantLLM:
         extra_context: Optional[str] = None,
         max_tokens: int = 256,
     ) -> StructuredResponse:
-        messages = [{"role": "system", "content": self._system_message}]
-
-        if env is not None:
-            messages.append({"role": "system", "content": env.to_prompt_block()})
+        rendered_system_message = self._render_system_message(env)
+        messages = [{"role": "system", "content": rendered_system_message}]
 
         if extra_context:
             messages.append(
@@ -109,3 +107,31 @@ class PomodoroAssistantLLM:
         content = self._backend.complete(messages, max_tokens=max_tokens)
         self._logger.info(content)
         return self._parser.parse(content, user_prompt)
+
+    def _render_system_message(self, env: Optional[EnvironmentContext]) -> str:
+        content = self._system_prompt_template
+        placeholders = self._resolve_environment_placeholders(env)
+        for key, value in placeholders.items():
+            content = content.replace("{" + key + "}", value)
+        return content
+
+    @staticmethod
+    def _default_environment_placeholders() -> dict[str, str]:
+        return {
+            "current_time": "Unbekannte Zeit",
+            "current_date": "Unbekanntes Datum",
+            "next_appointment": "Kein anstehender Termin",
+            "air_quality": "Keine Daten",
+            "ambient_light": "Keine Daten",
+        }
+
+    def _resolve_environment_placeholders(
+        self,
+        env: Optional[EnvironmentContext],
+    ) -> dict[str, str]:
+        if env is None:
+            return self._default_environment_placeholders()
+
+        resolved = self._default_environment_placeholders()
+        resolved.update(env.to_prompt_placeholders())
+        return resolved
