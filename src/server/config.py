@@ -9,6 +9,9 @@ class ServerConfigurationError(Exception):
     """Raised when UI server configuration is invalid."""
 
 
+WEBSOCKET_PATH = "/ws"
+
+
 def _default_index_file() -> Path:
     base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
     return base_dir / "web_ui" / "index.html"
@@ -19,7 +22,6 @@ class UIServerConfig:
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8765
-    websocket_path: str = "/ws"
     index_file: str = ""
 
     def __post_init__(self) -> None:
@@ -29,11 +31,6 @@ class UIServerConfig:
         if not 1 <= self.port <= 65535:
             raise ServerConfigurationError(
                 f"UI_SERVER_PORT must be in [1, 65535], got: {self.port}"
-            )
-
-        if not self.websocket_path.startswith("/"):
-            raise ServerConfigurationError(
-                f"UI_SERVER_WS_PATH must start with '/', got: {self.websocket_path}"
             )
 
         if self.enabled:
@@ -50,6 +47,10 @@ class UIServerConfig:
                     f"UI index path is not a file: {index_path}"
                 )
 
+    @property
+    def websocket_path(self) -> str:
+        return WEBSOCKET_PATH
+
     @classmethod
     def from_settings(cls, settings) -> "UIServerConfig":
         index_file = settings.index_file.strip() if settings.index_file else ""
@@ -59,6 +60,5 @@ class UIServerConfig:
             enabled=bool(settings.enabled),
             host=settings.host,
             port=settings.port,
-            websocket_path=settings.ws_path,
             index_file=index_file,
         )

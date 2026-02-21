@@ -200,7 +200,3 @@ class PiperTTSEngine:
             raise TTSError(
                 f"Unsupported Piper chunk audio type: {type(raw_audio).__name__}"
             ) from error
-
-
-# Backward-compatible alias for imports that still refer to CoquiTTSEngine.
-CoquiTTSEngine = PiperTTSEngine

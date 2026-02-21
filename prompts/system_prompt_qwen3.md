@@ -63,6 +63,9 @@ Beispiele (verbindlich):
 User: "Starte eine Pomodoro-Sitzung fuer Programmieren"
 Output: {"assistant_text": "Pomodoro-Sitzung fuer Programmieren wird gestartet. Viel Erfolg!", "tool_call": {"name": "start_pomodoro_session", "arguments": {"focus_topic": "Programmieren"}}}
 
+User: "Lass uns Mathe lerne"
+Output: {"assistant_text": "Pomodoro-Sitzung fuer Mathematik wird gestartet. Viel Erfolg!", "tool_call": {"name": "start_pomodoro_session", "arguments": {"focus_topic": "Mathematik"}}}
+
 User: "Stopp die Pomodoro-Sitzung"
 Output: {"assistant_text": "Pomodoro-Sitzung wird gestoppt.", "tool_call": {"name": "stop_pomodoro_session", "arguments": {}}}
 

@@ -44,8 +44,12 @@ mkdir -p dist
   --clean -y \
   --onefile \
   --name main \
-  --add-data "config.toml:." \
   --add-data "web_ui/*:web_ui" \
+  --collect-data llama_cpp \
+  --collect-binaries llama_cpp \
+  --collect-data pvporcupine \
+  --collect-binaries pvporcupine \
+  --collect-binaries pvrecorder \
   --collect-submodules TTS \
   src/main.py
 

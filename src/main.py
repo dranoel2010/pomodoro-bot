@@ -1,34 +1,11 @@
+from __future__ import annotations
+
 import logging
+import multiprocessing
 import signal
 import sys
 import time
-from typing import Optional
-
-from app_config import (
-    AppConfigurationError,
-    load_app_config,
-    load_secret_config,
-    resolve_config_path,
-)
-from llm import LLMConfig, PomodoroAssistantLLM
-from oracle import OracleConfig, OracleContextService
-from runtime import run_runtime_loop
-from server import ServerConfigurationError, UIServer, UIServerConfig
-from stt import (
-    ConfigurationError,
-    FasterWhisperSTT,
-    STTConfig,
-    STTError,
-    WakeWordConfig,
-    WakeWordService,
-)
-from tts import (
-    PiperTTSEngine,
-    SoundDeviceAudioOutput,
-    SpeechService,
-    TTSConfig,
-    TTSError,
-)
+from typing import Any, Optional
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
@@ -41,7 +18,7 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     return logging.getLogger("wake_word_app")
 
 
-def setup_signal_handlers(service: WakeWordService) -> None:
+def setup_signal_handlers(service: Any) -> None:
     """Set up graceful shutdown on SIGTERM and SIGINT."""
 
     def signal_handler(signum: int, frame) -> None:
@@ -54,7 +31,7 @@ def setup_signal_handlers(service: WakeWordService) -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
 
-def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> bool:
+def wait_for_service_ready(service: Any, timeout: float = 10.0) -> bool:
     """Wait for service to become ready, with fast-fail on crash."""
     start_time = time.time()
     poll_interval = 0.1
@@ -73,6 +50,13 @@ def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> b
 
 def main() -> int:
     """Run the wake-word assistant runtime."""
+    from app_config import (
+        AppConfigurationError,
+        load_app_config,
+        load_secret_config,
+        resolve_config_path,
+    )
+
     logger = setup_logging(level=logging.INFO)
 
     try:
@@ -82,6 +66,18 @@ def main() -> int:
         logger.info("Loaded runtime config: %s", config_path)
     except AppConfigurationError as error:
         logger.error(f"App configuration error: {error}")
+        return 1
+
+    try:
+        from stt import (
+            ConfigurationError,
+            FasterWhisperSTT,
+            STTConfig,
+            STTError,
+            WakeWordConfig,
+        )
+    except Exception as error:
+        logger.error("STT module import error: %s", error)
         return 1
 
     try:
@@ -109,9 +105,17 @@ def main() -> int:
         logger.error(f"STT initialization error: {error}")
         return 1
 
-    speech_service: Optional[SpeechService] = None
+    speech_service: Optional[Any] = None
     if app_config.tts.enabled:
         try:
+            from tts import (
+                PiperTTSEngine,
+                SoundDeviceAudioOutput,
+                SpeechService,
+                TTSConfig,
+                TTSError,
+            )
+
             tts_config = TTSConfig.from_settings(app_config.tts)
             tts_engine = PiperTTSEngine(
                 config=tts_config,
@@ -131,10 +135,12 @@ def main() -> int:
             logger.error(f"TTS initialization error: {error}")
             return 1
 
-    assistant_llm: Optional[PomodoroAssistantLLM] = None
+    assistant_llm: Optional[Any] = None
     llm_requested = app_config.llm.enabled
     if llm_requested:
         try:
+            from llm import LLMConfig, PomodoroAssistantLLM
+
             llm_config = LLMConfig.from_sources(
                 model_dir=app_config.llm.model_path,
                 hf_filename=app_config.llm.hf_filename,
@@ -161,9 +167,11 @@ def main() -> int:
             "TTS is enabled but LLM is disabled; no spoken reply will be generated."
         )
 
-    oracle_service: Optional[OracleContextService] = None
+    oracle_service: Optional[Any] = None
     if assistant_llm:
         try:
+            from oracle import OracleConfig, OracleContextService
+
             oracle_config = OracleConfig.from_settings(
                 app_config.oracle,
                 calendar_id=secret_config.oracle_google_calendar_id,
@@ -175,12 +183,18 @@ def main() -> int:
         except Exception as error:
             logger.warning("Oracle context disabled due to init error: %s", error)
 
-    ui_server: Optional[UIServer] = None
-    ui_server_config: Optional[UIServerConfig] = None
+    ui_server: Optional[Any] = None
+    ui_server_config: Optional[Any] = None
+
     try:
+        from server import ServerConfigurationError, UIServer, UIServerConfig
+
         ui_server_config = UIServerConfig.from_settings(app_config.ui_server)
     except ServerConfigurationError as error:
         logger.error(f"UI server configuration error: {error}")
+        logger.warning("Continuing without UI server.")
+    except Exception as error:
+        logger.error("UI server initialization error: %s", error)
         logger.warning("Continuing without UI server.")
 
     if ui_server_config and ui_server_config.enabled:
@@ -201,6 +215,12 @@ def main() -> int:
             logger.error(f"UI server startup failed: {error}")
             logger.warning("Continuing without UI server.")
 
+    try:
+        from runtime import run_runtime_loop
+    except Exception as error:
+        logger.error("Runtime loop initialization error: %s", error)
+        return 1
+
     return run_runtime_loop(
         logger=logger,
         app_config=app_config,
@@ -216,4 +236,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     sys.exit(main())

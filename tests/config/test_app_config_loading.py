@@ -109,18 +109,20 @@ class AppConfigLoadingTests(unittest.TestCase):
         self.assertEqual("cal-1", secret_config.oracle_google_calendar_id)
         self.assertEqual("/tmp/sa.json", secret_config.oracle_google_service_account_file)
 
-    def test_resolve_config_path_uses_bundle_fallback(self) -> None:
-        with tempfile.TemporaryDirectory() as cwd_dir, tempfile.TemporaryDirectory() as bundle_dir:
+    def test_resolve_config_path_uses_executable_dir_fallback_in_frozen_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as cwd_dir, tempfile.TemporaryDirectory() as exe_dir:
             cwd = Path(cwd_dir)
-            bundled_config = Path(bundle_dir) / "config.toml"
-            _write_text(bundled_config, "[wake_word]\nppn_file='a'\npv_file='b'\n")
+            executable_dir_config = Path(exe_dir) / "config.toml"
+            _write_text(executable_dir_config, "[wake_word]\nppn_file='a'\npv_file='b'\n")
+            executable = Path(exe_dir) / "main"
 
             with patch.dict(os.environ, {}, clear=True):
                 with patch("app_config.Path.cwd", return_value=cwd):
-                    with patch.object(sys, "_MEIPASS", bundle_dir, create=True):
-                        resolved = resolve_config_path()
+                    with patch.object(sys, "frozen", True, create=True):
+                        with patch.object(sys, "executable", str(executable), create=True):
+                            resolved = resolve_config_path()
 
-            self.assertEqual(bundled_config, resolved)
+            self.assertEqual(executable_dir_config.resolve(), resolved)
 
 
 if __name__ == "__main__":

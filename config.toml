@@ -55,8 +55,6 @@ verbose = false
 enabled = true
 host = "127.0.0.1"
 port = 8765
-ws_path = "/ws"
-# index_file = "web_ui/index.html"
 
 [oracle]
 calendar_cache_ttl_seconds = 60

@@ -29,20 +29,21 @@ def resolve_config_path(config_path: str | None = None) -> Path:
     env_path = os.getenv("APP_CONFIG_FILE")
     raw = config_path or env_path or DEFAULT_CONFIG_FILE
     path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = (Path.cwd() / path).resolve()
-    if path.exists():
+    if path.is_absolute():
         return path
 
-    # Packaged fallback: use bundled config.toml when no explicit path is provided.
-    if config_path is None and env_path is None:
-        bundle_root = Path(getattr(sys, "_MEIPASS", ""))
-        if str(bundle_root):
-            bundled_path = bundle_root / DEFAULT_CONFIG_FILE
-            if bundled_path.exists():
-                return bundled_path
+    cwd_path = (Path.cwd() / path).resolve()
+    if cwd_path.exists():
+        return cwd_path
 
-    return path
+    # In frozen mode with default config name, prefer config beside the executable.
+    if config_path is None and env_path is None and getattr(sys, "frozen", False):
+        executable_path = (
+            Path(sys.executable).resolve().parent / DEFAULT_CONFIG_FILE
+        ).resolve()
+        return executable_path
+
+    return cwd_path
 
 
 def load_app_config(config_path: str | None = None) -> AppConfig:

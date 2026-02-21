@@ -33,6 +33,14 @@ Current runtime pipeline:
   - wake-word model (`.ppn`)
   - Porcupine params (`.pv`)
 
+## Build Artifact Behavior
+
+- The packaged binary bundles Porcupine default package assets from `pvporcupine` (keyword resources + native libraries) so startup can reach app config loading.
+- `config.toml` is not embedded in the one-file executable. Provide it externally via `APP_CONFIG_FILE` or place it next to the binary.
+- Custom wake-word assets configured in `config.toml` (`wake_word.ppn_file`, `wake_word.pv_file`) are not bundled and must be present on the target machine.
+- App model directories under `models/` are not bundled.
+- LLM/TTS model files are expected to be downloaded on demand from Hugging Face when configured.
+
 ### Raspberry Pi 5 prerequisites
 
 Tested target: Raspberry Pi OS 64-bit (Bookworm).

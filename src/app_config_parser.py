@@ -125,7 +125,6 @@ def parse_app_config(
         enabled=_as_bool(ui_raw.get("enabled", True), "ui_server.enabled"),
         host=_as_str(ui_raw.get("host", "127.0.0.1"), "ui_server.host"),
         port=_as_int(ui_raw.get("port", 8765), "ui_server.port"),
-        ws_path=_as_str(ui_raw.get("ws_path", "/ws"), "ui_server.ws_path"),
         index_file=_resolve_path(base_dir, index_file) if index_file else "",
     )
 
