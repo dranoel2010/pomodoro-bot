@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Optional
 
+from tool_contract import tool_names_one_of_csv
+
 from .config import LLMConfig
 from .llama_backend import LlamaBackend
 from .parser import ResponseParser
@@ -66,11 +68,12 @@ class PomodoroAssistantLLM:
 
     @staticmethod
     def _default_system_message() -> str:
+        tool_names_csv = tool_names_one_of_csv()
         return (
             "Du bist ein deutscher Desktop-Sprachassistent fuer Fokusarbeit.\n"
             "Du antwortest IMMER nur auf Deutsch.\n"
             "Du MUSST ausschliesslich gueltiges JSON im folgenden Schema ausgeben:\n"
-            '{ "assistant_text": string, "tool_call": null | { "name": one_of(start_timer,stop_timer,pause_timer,continue_timer,reset_timer,start_pomodoro_session,stop_pomodoro_session,pause_pomodoro_session,continue_pomodoro_session,reset_pomodoro_session,show_upcoming_events,add_calendar_event), "arguments": object } }\n'
+            f'{{ "assistant_text": string, "tool_call": null | {{ "name": one_of({tool_names_csv}), "arguments": object }} }}\n'
             "Regeln:\n"
             "- Kein Markdown, keine Code-Fences, keine Zusatzschluessel.\n"
             "- Pro Antwort genau EIN Tool-Call oder null.\n"

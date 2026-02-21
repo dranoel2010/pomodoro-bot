@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
-import mimetypes
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
@@ -17,6 +14,8 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from .config import UIServerConfig
+from .events import StickyEventStore, make_event
+from .static_files import guess_content_type, resolve_static_file
 
 
 class UIServer:
@@ -35,8 +34,7 @@ class UIServer:
         self._started = threading.Event()
         self._startup_error: Optional[Exception] = None
         self._connected_clients: set[ServerConnection] = set()
-        self._sticky_events: dict[str, str] = {}
-        self._sticky_lock = threading.Lock()
+        self._sticky_store = StickyEventStore()
         self._index_file = Path(self._config.index_file).resolve()
         self._ui_root = self._index_file.parent
         self._index_html = self._index_file.read_bytes()
@@ -111,23 +109,8 @@ class UIServer:
         if not self.is_running or self._loop is None:
             return
 
-        message = json.dumps(
-            {
-                "type": event_type,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                **payload,
-            }
-        )
-        if event_type in {
-            "state_update",
-            "pomodoro",
-            "timer",
-            "transcript",
-            "assistant_reply",
-            "error",
-        }:
-            with self._sticky_lock:
-                self._sticky_events[event_type] = message
+        message = make_event(event_type, **payload)
+        self._sticky_store.remember(event_type, message)
 
         try:
             future = asyncio.run_coroutine_threadsafe(
@@ -198,13 +181,13 @@ class UIServer:
         self._logger.info("Client connected: %s", websocket.remote_address)
         try:
             await websocket.send(
-                self._make_event(
+                make_event(
                     "hello",
                     state="idle",
                     message="UI websocket connected",
                 )
             )
-            for sticky_message in self._sticky_snapshot():
+            for sticky_message in self._sticky_store.snapshot():
                 await websocket.send(sticky_message)
             async for message in websocket:
                 self._logger.debug("Received from UI: %s", message)
@@ -240,14 +223,14 @@ class UIServer:
                 "text/plain; charset=utf-8",
             )
 
-        static_file = self._resolve_static_file(path)
+        static_file = resolve_static_file(self._ui_root, path)
         if static_file is not None:
             with contextlib.suppress(OSError):
                 return self._response(
                     200,
                     "OK",
                     static_file.read_bytes(),
-                    self._guess_content_type(static_file),
+                    guess_content_type(static_file),
                 )
 
         return self._response(
@@ -296,55 +279,3 @@ class UIServer:
 
         for client in disconnected:
             self._connected_clients.discard(client)
-
-    @staticmethod
-    def _make_event(event_type: str, **payload) -> str:
-        return json.dumps(
-            {
-                "type": event_type,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                **payload,
-            }
-        )
-
-    def _sticky_snapshot(self) -> list[str]:
-        order = (
-            "state_update",
-            "pomodoro",
-            "timer",
-            "transcript",
-            "assistant_reply",
-            "error",
-        )
-        with self._sticky_lock:
-            return [self._sticky_events[key] for key in order if key in self._sticky_events]
-
-    def _resolve_static_file(self, request_path: str) -> Optional[Path]:
-        if not request_path or request_path == "/":
-            return None
-
-        relative = request_path.lstrip("/")
-        if not relative:
-            return None
-
-        candidate = (self._ui_root / relative).resolve()
-        if self._ui_root not in candidate.parents:
-            return None
-
-        if not candidate.is_file():
-            return None
-
-        return candidate
-
-    @staticmethod
-    def _guess_content_type(path: Path) -> str:
-        mime_type, _ = mimetypes.guess_type(str(path))
-        if not mime_type:
-            return "application/octet-stream"
-        if mime_type.startswith("text/") or mime_type in {
-            "application/javascript",
-            "application/json",
-            "application/xml",
-        }:
-            return f"{mime_type}; charset=utf-8"
-        return mime_type

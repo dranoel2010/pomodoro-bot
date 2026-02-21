@@ -243,7 +243,10 @@ function connectWebSocket() {
         }
 
         const nextState = payload?.state;
-        if (["idle", "listening", "transcribing", "thinking", "replying", "error"].includes(nextState)) {
+        if (
+            payload?.type === "state_update" &&
+            ["idle", "listening", "transcribing", "thinking", "replying", "error"].includes(nextState)
+        ) {
             setState(nextState);
         }
         if (nextState && nextState !== "error") {

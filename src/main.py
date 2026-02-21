@@ -2,11 +2,7 @@ import logging
 import signal
 import sys
 import time
-import datetime as dt
-import re
-import concurrent.futures
-from queue import Empty, Queue
-from typing import Any, Optional
+from typing import Optional
 
 from app_config import (
     AppConfigurationError,
@@ -14,16 +10,16 @@ from app_config import (
     load_secret_config,
     resolve_config_path,
 )
+from llm import LLMConfig, PomodoroAssistantLLM
+from oracle import OracleConfig, OracleContextService
+from runtime import run_runtime_loop
+from server import ServerConfigurationError, UIServer, UIServerConfig
 from stt import (
     ConfigurationError,
     FasterWhisperSTT,
-    QueueEventPublisher,
     STTConfig,
     STTError,
-    UtteranceCapturedEvent,
     WakeWordConfig,
-    WakeWordDetectedEvent,
-    WakeWordErrorEvent,
     WakeWordService,
 )
 from tts import (
@@ -33,10 +29,6 @@ from tts import (
     TTSConfig,
     TTSError,
 )
-from llm import EnvironmentContext, LLMConfig, PomodoroAssistantLLM
-from oracle import OracleConfig, OracleContextService
-from pomodoro import PomodoroAction, PomodoroSnapshot, PomodoroTick, PomodoroTimer
-from server import ServerConfigurationError, UIServer, UIServerConfig
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
@@ -63,15 +55,7 @@ def setup_signal_handlers(service: WakeWordService) -> None:
 
 
 def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> bool:
-    """Wait for service to become ready, with fast-fail on crash.
-
-    Args:
-        service: The wake word service
-        timeout: Maximum time to wait in seconds
-
-    Returns:
-        True if service became ready, False if it failed or timed out
-    """
+    """Wait for service to become ready, with fast-fail on crash."""
     start_time = time.time()
     poll_interval = 0.1
 
@@ -79,7 +63,6 @@ def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> b
         if service.is_ready:
             return True
 
-        # Fast-fail: if service died during startup, don't wait full timeout
         if not service.is_running:
             return False
 
@@ -88,72 +71,10 @@ def wait_for_service_ready(service: WakeWordService, timeout: float = 10.0) -> b
     return service.is_ready
 
 
-TIMER_TOOL_TO_ACTION: dict[str, PomodoroAction] = {
-    "start_timer": "start",
-    "pause_timer": "pause",
-    "continue_timer": "continue",
-    "stop_timer": "abort",
-    "reset_timer": "reset",
-}
-
-POMODORO_TOOL_TO_ACTION: dict[str, PomodoroAction] = {
-    "start_pomodoro_session": "start",
-    "pause_pomodoro_session": "pause",
-    "continue_pomodoro_session": "continue",
-    "stop_pomodoro_session": "abort",
-    "reset_pomodoro_session": "reset",
-}
-
-CALENDAR_TOOLS: set[str] = {
-    "show_upcoming_events",
-    "add_calendar_event",
-}
-
-ACTIVE_SESSION_PHASES: set[str] = {"running", "paused"}
-
-
-def _format_duration(seconds: int) -> str:
-    minutes, remainder = divmod(max(0, int(seconds)), 60)
-    return f"{minutes:02d}:{remainder:02d}"
-
-
-def _timer_status_message(snapshot: PomodoroSnapshot) -> str:
-    if snapshot.phase == "running":
-        return (
-            f"Timer laeuft ({_format_duration(snapshot.remaining_seconds)} verbleibend)"
-        )
-    if snapshot.phase == "paused":
-        return f"Timer pausiert ({_format_duration(snapshot.remaining_seconds)} verbleibend)"
-    if snapshot.phase == "completed":
-        return "Timer abgeschlossen"
-    if snapshot.phase == "aborted":
-        return "Timer gestoppt"
-    return "Bereit"
-
-
-def _pomodoro_status_message(snapshot: PomodoroSnapshot) -> str:
-    if snapshot.phase == "running":
-        return (
-            f"Pomodoro '{snapshot.session or 'Fokus'}' laeuft "
-            f"({_format_duration(snapshot.remaining_seconds)} verbleibend)"
-        )
-    if snapshot.phase == "paused":
-        return (
-            f"Pomodoro '{snapshot.session or 'Fokus'}' pausiert "
-            f"({_format_duration(snapshot.remaining_seconds)} verbleibend)"
-        )
-    if snapshot.phase == "completed":
-        return f"Pomodoro '{snapshot.session or 'Fokus'}' abgeschlossen"
-    if snapshot.phase == "aborted":
-        return f"Pomodoro '{snapshot.session or 'Fokus'}' gestoppt"
-    return "Bereit"
-
-
 def main() -> int:
-    """Run the wake word detection service."""
+    """Run the wake-word assistant runtime."""
     logger = setup_logging(level=logging.INFO)
 
-    # Load typed app configuration and secrets.
     try:
         config_path = resolve_config_path()
         app_config = load_app_config(str(config_path))
@@ -163,9 +84,8 @@ def main() -> int:
         logger.error(f"App configuration error: {error}")
         return 1
 
-    # Load configurations
     try:
-        config = WakeWordConfig.from_settings(
+        wake_word_config = WakeWordConfig.from_settings(
             pico_voice_access_key=secret_config.pico_voice_access_key,
             settings=app_config.wake_word,
         )
@@ -174,7 +94,6 @@ def main() -> int:
         logger.error(f"Configuration error: {error}")
         return 1
 
-    # Create STT service
     stt_logger = logging.getLogger("stt")
     try:
         stt = FasterWhisperSTT(
@@ -190,7 +109,6 @@ def main() -> int:
         logger.error(f"STT initialization error: {error}")
         return 1
 
-    # Optional TTS service
     speech_service: Optional[SpeechService] = None
     if app_config.tts.enabled:
         try:
@@ -213,7 +131,6 @@ def main() -> int:
             logger.error(f"TTS initialization error: {error}")
             return 1
 
-    # Optional LLM service
     assistant_llm: Optional[PomodoroAssistantLLM] = None
     llm_requested = app_config.llm.enabled
     if llm_requested:
@@ -244,7 +161,6 @@ def main() -> int:
             "TTS is enabled but LLM is disabled; no spoken reply will be generated."
         )
 
-    # Optional oracle context providers (sensors/calendar) for LLM environment block
     oracle_service: Optional[OracleContextService] = None
     if assistant_llm:
         try:
@@ -259,27 +175,6 @@ def main() -> int:
         except Exception as error:
             logger.warning("Oracle context disabled due to init error: %s", error)
 
-    def build_llm_environment_context() -> EnvironmentContext:
-        payload = {
-            "now_local": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-            "light_level_lux": None,
-            "air_quality": None,
-            "upcoming_events": None,
-        }
-        if oracle_service is not None:
-            try:
-                payload.update(oracle_service.build_environment_payload())
-            except Exception as error:
-                logger.warning("Failed to collect oracle context: %s", error)
-
-        return EnvironmentContext(
-            now_local=payload["now_local"],
-            light_level_lux=payload.get("light_level_lux"),
-            air_quality=payload.get("air_quality"),
-            upcoming_events=payload.get("upcoming_events"),
-        )
-
-    # Optional UI server for static page + websocket updates
     ui_server: Optional[UIServer] = None
     ui_server_config: Optional[UIServerConfig] = None
     try:
@@ -306,709 +201,18 @@ def main() -> int:
             logger.error(f"UI server startup failed: {error}")
             logger.warning("Continuing without UI server.")
 
-    def publish_ui(event_type: str, **payload) -> None:
-        if ui_server:
-            ui_server.publish(event_type, **payload)
-
-    def publish_ui_state(
-        state: str,
-        *,
-        message: Optional[str] = None,
-        **payload,
-    ) -> None:
-        if ui_server:
-            ui_server.publish_state(state, message=message, **payload)
-
-    pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
-    countdown_timer = PomodoroTimer(
-        duration_seconds=10 * 60,
-        logger=logging.getLogger("timer"),
+    return run_runtime_loop(
+        logger=logger,
+        app_config=app_config,
+        wake_word_config=wake_word_config,
+        stt=stt,
+        assistant_llm=assistant_llm,
+        speech_service=speech_service,
+        oracle_service=oracle_service,
+        ui_server=ui_server,
+        setup_signal_handlers_fn=setup_signal_handlers,
+        wait_for_service_ready_fn=wait_for_service_ready,
     )
-
-    def _default_pomodoro_text(action: str, snapshot: PomodoroSnapshot) -> str:
-        topic = snapshot.session or "Fokus"
-        if action == "start":
-            return f"Ich starte jetzt deine Pomodoro Sitzung fuer {topic}."
-        if action == "continue":
-            return f"Ich setze die Pomodoro Sitzung fuer {topic} fort."
-        if action == "pause":
-            return f"Ich pausiere die Pomodoro Sitzung fuer {topic}."
-        if action == "abort":
-            return f"Ich stoppe die Pomodoro Sitzung fuer {topic}."
-        if action == "completed":
-            return f"Pomodoro abgeschlossen. Gute Arbeit bei {topic}."
-        return f"Pomodoro aktualisiert: {topic}."
-
-    def _pomodoro_rejection_text(action: str, reason: str) -> str:
-        if reason == "timer_active":
-            return "Es laeuft bereits ein Timer. Bitte stoppe den Timer zuerst."
-        if reason == "not_running" and action == "pause":
-            return "Die Pomodoro Sitzung laeuft gerade nicht."
-        if reason == "not_paused" and action == "continue":
-            return "Die Pomodoro Sitzung ist nicht pausiert."
-        if reason == "not_active" and action == "abort":
-            return "Es gibt keine aktive Pomodoro Sitzung."
-        return "Die Pomodoro Aktion ist im aktuellen Zustand nicht moeglich."
-
-    def _default_timer_text(action: str, snapshot: PomodoroSnapshot) -> str:
-        if action == "start":
-            return f"Ich starte den Timer mit {_format_duration(snapshot.duration_seconds)}."
-        if action == "continue":
-            return "Ich setze den Timer fort."
-        if action == "pause":
-            return "Ich pausiere den Timer."
-        if action == "abort":
-            return "Ich stoppe den Timer."
-        if action == "reset":
-            return "Ich setze den Timer zurueck."
-        if action == "completed":
-            return "Der Timer ist abgelaufen."
-        return "Timer aktualisiert."
-
-    def _timer_rejection_text(action: str, reason: str) -> str:
-        if reason == "pomodoro_active":
-            return "Es laeuft bereits eine Pomodoro Sitzung. Bitte stoppe sie zuerst."
-        if reason == "not_running" and action == "pause":
-            return "Der Timer laeuft gerade nicht."
-        if reason == "not_paused" and action == "continue":
-            return "Der Timer ist nicht pausiert."
-        if reason == "not_active" and action == "abort":
-            return "Es gibt keinen aktiven Timer."
-        return "Die Timer Aktion ist im aktuellen Zustand nicht moeglich."
-
-    def publish_pomodoro_update(
-        snapshot: PomodoroSnapshot,
-        *,
-        action: str,
-        accepted: Optional[bool] = None,
-        reason: str = "",
-        tool_name: Optional[str] = None,
-        motivation: Optional[str] = None,
-    ) -> None:
-        payload: dict[str, Any] = {
-            "action": action,
-            "phase": snapshot.phase,
-            "session": snapshot.session,
-            "duration_seconds": snapshot.duration_seconds,
-            "remaining_seconds": snapshot.remaining_seconds,
-        }
-        if accepted is not None:
-            payload["accepted"] = accepted
-        if reason:
-            payload["reason"] = reason
-        if tool_name:
-            payload["tool_name"] = tool_name
-        if motivation:
-            payload["motivation"] = motivation
-        publish_ui("pomodoro", **payload)
-
-    def publish_timer_update(
-        snapshot: PomodoroSnapshot,
-        *,
-        action: str,
-        accepted: Optional[bool] = None,
-        reason: str = "",
-        tool_name: Optional[str] = None,
-        message: Optional[str] = None,
-    ) -> None:
-        payload: dict[str, Any] = {
-            "action": action,
-            "phase": snapshot.phase,
-            "duration_seconds": snapshot.duration_seconds,
-            "remaining_seconds": snapshot.remaining_seconds,
-        }
-        if accepted is not None:
-            payload["accepted"] = accepted
-        if reason:
-            payload["reason"] = reason
-        if tool_name:
-            payload["tool_name"] = tool_name
-        if message:
-            payload["message"] = message
-        publish_ui("timer", **payload)
-
-    def _is_session_active(snapshot: PomodoroSnapshot) -> bool:
-        return snapshot.phase in ACTIVE_SESSION_PHASES
-
-    def _stop_timer_for_pomodoro_switch() -> None:
-        timer_snapshot = countdown_timer.snapshot()
-        if not _is_session_active(timer_snapshot):
-            return
-
-        result = countdown_timer.apply("abort", session="Timer")
-        publish_timer_update(
-            result.snapshot,
-            action="abort",
-            accepted=result.accepted,
-            reason="superseded_by_pomodoro",
-            message="Timer beendet, Pomodoro startet jetzt.",
-        )
-
-    def _stop_pomodoro_for_timer_switch() -> None:
-        pomodoro_snapshot = pomodoro_timer.snapshot()
-        if not _is_session_active(pomodoro_snapshot):
-            return
-
-        result = pomodoro_timer.apply("abort", session=pomodoro_snapshot.session)
-        publish_pomodoro_update(
-            result.snapshot,
-            action="abort",
-            accepted=result.accepted,
-            reason="superseded_by_timer",
-            motivation="Pomodoro Sitzung beendet, Timer startet jetzt.",
-        )
-
-    def _parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
-        if isinstance(value, (int, float)) and int(value) > 0:
-            return int(value) * 60
-        if isinstance(value, str):
-            raw = value.strip().lower()
-            if raw.isdigit():
-                return max(1, int(raw)) * 60
-            match = re.search(
-                r"(\d{1,4})\s*(s|sek|sekunde|sekunden|m|min|minute|minuten|h|stunde|stunden)",
-                raw,
-            )
-            if match:
-                amount = int(match.group(1))
-                unit = match.group(2)
-                if unit in {"s", "sek", "sekunde", "sekunden"}:
-                    return max(1, amount)
-                if unit in {"h", "stunde", "stunden"}:
-                    return max(1, amount) * 3600
-                return max(1, amount) * 60
-        return default_seconds
-
-    def _active_runtime_message() -> str:
-        pomodoro_snapshot = pomodoro_timer.snapshot()
-        if pomodoro_snapshot.phase in {"running", "paused"}:
-            return _pomodoro_status_message(pomodoro_snapshot)
-        timer_snapshot = countdown_timer.snapshot()
-        if timer_snapshot.phase in {"running", "paused"}:
-            return _timer_status_message(timer_snapshot)
-        return "Listening for wake word"
-
-    def _parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
-        if not isinstance(value, str):
-            return None
-        raw = value.strip()
-        if not raw:
-            return None
-
-        raw = raw.replace(" ", "T")
-        if raw.endswith("Z"):
-            raw = raw[:-1] + "+00:00"
-        try:
-            parsed = dt.datetime.fromisoformat(raw)
-        except ValueError:
-            de_match = re.match(
-                r"^(\d{1,2})\.(\d{1,2})\.(\d{4})T(\d{1,2}):(\d{2})$", raw
-            )
-            if not de_match:
-                return None
-            day, month, year, hour, minute = de_match.groups()
-            parsed = dt.datetime(
-                year=int(year),
-                month=int(month),
-                day=int(day),
-                hour=int(hour),
-                minute=int(minute),
-            )
-
-        if parsed.tzinfo is None:
-            local_tz = dt.datetime.now().astimezone().tzinfo or dt.timezone.utc
-            return parsed.replace(tzinfo=local_tz)
-        return parsed
-
-    def _calendar_window_end(time_range: str) -> dt.datetime:
-        now = dt.datetime.now().astimezone()
-        lowered = time_range.lower()
-        if "uebermorgen" in lowered:
-            target = now + dt.timedelta(days=2)
-            return target.replace(hour=23, minute=59, second=59, microsecond=0)
-        if "morgen" in lowered:
-            target = now + dt.timedelta(days=1)
-            return target.replace(hour=23, minute=59, second=59, microsecond=0)
-        if "naechste woche" in lowered:
-            return now + dt.timedelta(days=7)
-        days_match = re.search(r"naechste\s+(\d+)\s+tage", lowered)
-        if days_match:
-            return now + dt.timedelta(days=max(1, int(days_match.group(1))))
-        if "heute" in lowered:
-            return now.replace(hour=23, minute=59, second=59, microsecond=0)
-        return now + dt.timedelta(days=3)
-
-    def _handle_calendar_tool_call(tool_name: str, arguments: dict[str, Any]) -> str:
-        if oracle_service is None:
-            return "Kalenderfunktion ist derzeit nicht verfuegbar."
-
-        try:
-            if tool_name == "show_upcoming_events":
-                time_range = (
-                    str(arguments.get("time_range", "heute")).strip() or "heute"
-                )
-                now = dt.datetime.now().astimezone()
-                window_end = _calendar_window_end(time_range)
-                events = oracle_service.list_upcoming_events(
-                    max_results=app_config.oracle.google_calendar_max_results * 2,
-                    time_min=now,
-                )
-
-                filtered: list[dict[str, Any]] = []
-                for event in events:
-                    start_raw = event.get("start")
-                    if not isinstance(start_raw, str):
-                        continue
-                    parsed_start = _parse_calendar_datetime(start_raw)
-                    if parsed_start is None:
-                        continue
-                    if parsed_start <= window_end:
-                        filtered.append(event)
-
-                if not filtered:
-                    return f"Es gibt keine anstehenden Termine fuer {time_range}."
-
-                top = filtered[: app_config.oracle.google_calendar_max_results]
-                parts = []
-                for item in top:
-                    summary = str(item.get("summary") or "Ohne Titel")
-                    start_time = str(item.get("start") or "ohne Zeit")
-                    parts.append(f"{summary} um {start_time}")
-                return "Anstehende Termine: " + "; ".join(parts) + "."
-
-            if tool_name == "add_calendar_event":
-                title = str(arguments.get("title", "")).strip()
-                start_time = _parse_calendar_datetime(arguments.get("start_time"))
-                end_time = _parse_calendar_datetime(arguments.get("end_time"))
-                duration_seconds = _parse_duration_seconds(
-                    arguments.get("duration"),
-                    default_seconds=30 * 60,
-                )
-                if start_time is None:
-                    return "Ich konnte den Termin nicht anlegen, weil die Startzeit fehlt oder ungueltig ist."
-                if not title:
-                    return "Ich konnte den Termin nicht anlegen, weil der Titel fehlt."
-                if end_time is None:
-                    end_time = start_time + dt.timedelta(seconds=duration_seconds)
-                if end_time <= start_time:
-                    end_time = start_time + dt.timedelta(seconds=duration_seconds)
-
-                event_id = oracle_service.add_event(
-                    title=title,
-                    start=start_time,
-                    end=end_time,
-                )
-                return f"Termin angelegt: {title}. Ereignis-ID: {event_id}."
-        except Exception as error:
-            logger.error("Kalenderaktion fehlgeschlagen (%s): %s", tool_name, error)
-            return f"Kalenderaktion fehlgeschlagen: {error}"
-
-        return "Kalenderaktion verarbeitet."
-
-    def handle_pomodoro_tool_call(
-        tool_name: str,
-        arguments: dict[str, Any],
-        assistant_text: str,
-    ) -> str:
-        action = POMODORO_TOOL_TO_ACTION[tool_name]
-        timer_snapshot = countdown_timer.snapshot()
-        if _is_session_active(timer_snapshot):
-            if action in {"start", "reset"}:
-                _stop_timer_for_pomodoro_switch()
-            else:
-                response_text = _pomodoro_rejection_text(action, "timer_active")
-                publish_pomodoro_update(
-                    pomodoro_timer.snapshot(),
-                    action=action,
-                    accepted=False,
-                    reason="timer_active",
-                    tool_name=tool_name,
-                    motivation=response_text,
-                )
-                return response_text
-
-        focus_topic_raw = arguments.get("focus_topic")
-        focus_topic = (
-            str(focus_topic_raw).strip()
-            if isinstance(focus_topic_raw, str) and focus_topic_raw.strip()
-            else None
-        )
-        result = pomodoro_timer.apply(action, session=focus_topic)
-        if result.accepted:
-            response_text = assistant_text.strip() or _default_pomodoro_text(
-                action,
-                result.snapshot,
-            )
-        else:
-            response_text = _pomodoro_rejection_text(action, result.reason)
-        publish_pomodoro_update(
-            result.snapshot,
-            action=action,
-            accepted=result.accepted,
-            reason=result.reason,
-            tool_name=tool_name,
-            motivation=response_text,
-        )
-        return response_text
-
-    def handle_timer_tool_call(
-        tool_name: str,
-        arguments: dict[str, Any],
-        assistant_text: str,
-    ) -> str:
-        action = TIMER_TOOL_TO_ACTION[tool_name]
-        pomodoro_snapshot = pomodoro_timer.snapshot()
-        if _is_session_active(pomodoro_snapshot):
-            response_text = _timer_rejection_text(action, "pomodoro_active")
-            publish_timer_update(
-                countdown_timer.snapshot(),
-                action=action,
-                accepted=False,
-                reason="pomodoro_active",
-                tool_name=tool_name,
-                message=response_text,
-            )
-            return response_text
-
-        if action == "start":
-            duration_seconds = _parse_duration_seconds(
-                arguments.get("duration"),
-                default_seconds=10 * 60,
-            )
-            result = countdown_timer.apply(
-                action,
-                session="Timer",
-                duration_seconds=duration_seconds,
-            )
-        else:
-            logger.info("----------------------PAUSE- --------------")
-            result = countdown_timer.apply(action, session="Timer")
-
-        if result.accepted:
-            response_text = assistant_text.strip() or _default_timer_text(
-                action,
-                result.snapshot,
-            )
-        else:
-            response_text = _timer_rejection_text(action, result.reason)
-        publish_timer_update(
-            result.snapshot,
-            action=action,
-            accepted=result.accepted,
-            reason=result.reason,
-            tool_name=tool_name,
-            message=response_text,
-        )
-        return response_text
-
-    def handle_tool_call(tool_call: dict[str, Any], assistant_text: str) -> str:
-        raw_name = tool_call.get("name")
-        if not isinstance(raw_name, str):
-            return assistant_text
-        raw_arguments = tool_call.get("arguments")
-        arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
-
-        pomodoro_snapshot = pomodoro_timer.snapshot()
-        if _is_session_active(pomodoro_snapshot):
-            raw_name = raw_name.replace("_timer", "_pomodoro_session")
-
-        if raw_name in POMODORO_TOOL_TO_ACTION:
-            return handle_pomodoro_tool_call(raw_name, arguments, assistant_text)
-        if raw_name in TIMER_TOOL_TO_ACTION:
-            return handle_timer_tool_call(raw_name, arguments, assistant_text)
-        if raw_name in CALENDAR_TOOLS:
-            return _handle_calendar_tool_call(raw_name, arguments)
-
-        logger.warning("Unsupported tool call: %s", raw_name)
-        return assistant_text
-
-    def process_utterance(utterance) -> None:
-        print("  ⏳ Transcribing...\n", end="", flush=True)
-        try:
-            result = stt.transcribe(utterance)
-            if not result.text:
-                print("\r  ⚠️  No speech detected\n")
-                publish_ui_state("idle", message="No speech detected")
-                return
-
-            confidence_str = (
-                f" (confidence: {result.confidence:.0%})" if result.confidence else ""
-            )
-            print(f'\r  💬 "{result.text}"{confidence_str}\n')
-            publish_ui(
-                "transcript",
-                state="transcribing",
-                text=result.text,
-                language=result.language,
-                confidence=result.confidence,
-            )
-
-            if not assistant_llm:
-                publish_idle_state()
-                return
-
-            publish_ui_state("thinking", message="Generating reply")
-            env_context = build_llm_environment_context()
-            llm_response = assistant_llm.run(
-                result.text,
-                env=env_context,
-            )
-            assistant_text = llm_response["assistant_text"].strip()
-            tool_call = llm_response.get("tool_call")
-            if isinstance(tool_call, dict):
-                assistant_text = handle_tool_call(
-                    tool_call,
-                    assistant_text,
-                ).strip()
-
-            if assistant_text:
-                print(f'  🤖 "{assistant_text}"\n')
-                publish_ui(
-                    "assistant_reply",
-                    state="replying",
-                    text=assistant_text,
-                )
-            if speech_service and assistant_text:
-                speech_service.speak(assistant_text)
-            publish_idle_state()
-        except TTSError as error:
-            logger.error(f"TTS playback failed: {error}")
-            publish_ui(
-                "error",
-                state="error",
-                message=f"TTS playback failed: {error}",
-            )
-            publish_idle_state()
-        except STTError as error:
-            logger.error(f"Transcription failed: {error}")
-            publish_ui(
-                "error",
-                state="error",
-                message=f"Transcription failed: {error}",
-            )
-            publish_idle_state()
-        except Exception as error:
-            logger.error(f"LLM processing failed: {error}")
-            publish_ui(
-                "error",
-                state="error",
-                message=f"LLM processing failed: {error}",
-            )
-            publish_idle_state()
-
-    def handle_pomodoro_tick(tick: PomodoroTick) -> None:
-        if tick.completed:
-            completion_message = _default_pomodoro_text("completed", tick.snapshot)
-            publish_pomodoro_update(
-                tick.snapshot,
-                action="completed",
-                accepted=True,
-                reason="completed",
-                motivation=completion_message,
-            )
-            publish_ui("assistant_reply", state="replying", text=completion_message)
-            if speech_service:
-                try:
-                    speech_service.speak(completion_message)
-                except TTSError as error:
-                    logger.error("TTS completion playback failed: %s", error)
-            return
-
-        publish_pomodoro_update(
-            tick.snapshot,
-            action="tick",
-            accepted=True,
-            reason="tick",
-        )
-
-    def handle_timer_tick(tick: PomodoroTick) -> None:
-        if tick.completed:
-            completion_message = _default_timer_text("completed", tick.snapshot)
-            publish_timer_update(
-                tick.snapshot,
-                action="completed",
-                accepted=True,
-                reason="completed",
-                message=completion_message,
-            )
-            publish_ui("assistant_reply", state="replying", text=completion_message)
-            if speech_service:
-                try:
-                    speech_service.speak(completion_message)
-                except TTSError as error:
-                    logger.error("TTS timer completion playback failed: %s", error)
-            return
-
-        publish_timer_update(
-            tick.snapshot,
-            action="tick",
-            accepted=True,
-            reason="tick",
-        )
-
-    def publish_idle_state() -> None:
-        publish_ui_state("idle", message=_active_runtime_message())
-
-    publish_pomodoro_update(
-        pomodoro_timer.snapshot(),
-        action="sync",
-        accepted=True,
-        reason="startup",
-    )
-    publish_timer_update(
-        countdown_timer.snapshot(),
-        action="sync",
-        accepted=True,
-        reason="startup",
-    )
-
-    # Create wake word service
-    event_queue: Queue = Queue()
-    publisher = QueueEventPublisher(event_queue)
-    service: Optional[WakeWordService] = None
-    wake_word_logger = logging.getLogger("wake_word")
-    utterance_executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=1,
-        thread_name_prefix="utterance",
-    )
-    pending_utterance: Optional[concurrent.futures.Future[None]] = None
-
-    try:
-        service = WakeWordService(
-            config=config,
-            publisher=publisher,
-            logger=wake_word_logger,
-        )
-
-        setup_signal_handlers(service)
-
-        logger.info("Starting wake word service...")
-        service.start()
-
-        # Wait for service to be ready (with fast-fail on crash)
-        logger.debug("Initializing wake word detection...")
-        if not wait_for_service_ready(service, timeout=10.0):
-            # Check if service crashed vs. timed out
-            if not service.is_running:
-                logger.error("Service crashed during initialization.")
-            else:
-                logger.error("Service initialization timed out.")
-
-            return 1
-
-        logger.info("Ready! Listening for wake word ...")
-        publish_idle_state()
-
-        # Main event loop
-        while True:
-            if pending_utterance is not None and pending_utterance.done():
-                try:
-                    pending_utterance.result()
-                except Exception as error:
-                    logger.error("Utterance worker failed: %s", error, exc_info=True)
-                    publish_ui(
-                        "error",
-                        state="error",
-                        message=f"Utterance worker failed: {error}",
-                    )
-                    publish_idle_state()
-                finally:
-                    pending_utterance = None
-
-            pomodoro_tick = pomodoro_timer.poll()
-            if pomodoro_tick is not None:
-                handle_pomodoro_tick(pomodoro_tick)
-
-            timer_tick = countdown_timer.poll()
-            if timer_tick is not None:
-                handle_timer_tick(timer_tick)
-
-            try:
-                event = event_queue.get(timeout=0.25)
-            except Empty:
-                if not service.is_running:
-                    logger.error("Service stopped unexpectedly")
-                    publish_ui(
-                        "error",
-                        state="error",
-                        message="Wake word service stopped unexpectedly",
-                    )
-                    return 1
-                continue
-
-            if isinstance(event, WakeWordDetectedEvent):
-                print(f"[{event.occurred_at.isoformat()}] 🎤 WakeWordDetectedEvent\n")
-                publish_ui_state("listening", message="Wake word detected")
-
-            elif isinstance(event, UtteranceCapturedEvent):
-                utterance = event.utterance
-                print(
-                    f"[{utterance.created_at.isoformat()}] ✓ UtteranceCapturedEvent: "
-                    f"{utterance.duration_seconds:.2f}s, {len(utterance.audio_bytes):,} bytes\n"
-                )
-                if pending_utterance is not None and not pending_utterance.done():
-                    logger.warning(
-                        "Skipping utterance while previous request is still processing."
-                    )
-                    publish_ui_state(
-                        "thinking", message="Previous request still processing"
-                    )
-                    continue
-
-                publish_ui_state(
-                    "transcribing",
-                    message="Transcribing utterance",
-                    duration_seconds=round(utterance.duration_seconds, 2),
-                    audio_bytes=len(utterance.audio_bytes),
-                )
-                try:
-                    pending_utterance = utterance_executor.submit(
-                        process_utterance,
-                        utterance,
-                    )
-                except Exception as error:
-                    logger.error("Failed to submit utterance task: %s", error)
-                    publish_ui(
-                        "error",
-                        state="error",
-                        message=f"Failed to submit utterance task: {error}",
-                    )
-                    publish_idle_state()
-
-            elif isinstance(event, WakeWordErrorEvent):
-                logger.error(
-                    f"WakeWordErrorEvent: {event.message}", exc_info=event.exception
-                )
-                publish_ui(
-                    "error",
-                    state="error",
-                    message=f"WakeWordErrorEvent: {event.message}",
-                )
-                return 1
-
-    except KeyboardInterrupt:
-        print("\n👋 Shutting down...\n")
-        return 0
-
-    except Exception as error:
-        logger.error(f"Unexpected error: {error}", exc_info=True)
-        return 1
-
-    finally:
-        logger.info("Stopping utterance executor...")
-        utterance_executor.shutdown(wait=False, cancel_futures=True)
-        if service:
-            logger.info("Stopping service...")
-            try:
-                service.stop(timeout_seconds=5.0)
-            except Exception as error:
-                logger.error(f"Error stopping service: {error}", exc_info=True)
-        if ui_server:
-            logger.info("Stopping UI server...")
-            try:
-                ui_server.stop(timeout_seconds=5.0)
-            except Exception as error:
-                logger.error(f"Error stopping UI server: {error}", exc_info=True)
 
 
 if __name__ == "__main__":

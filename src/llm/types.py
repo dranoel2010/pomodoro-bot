@@ -5,21 +5,9 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, TypedDict
 
+from tool_contract import TOOL_NAME_ORDER
 
-ToolName = Literal[
-    "start_timer",
-    "stop_timer",
-    "pause_timer",
-    "continue_timer",
-    "reset_timer",
-    "start_pomodoro_session",
-    "stop_pomodoro_session",
-    "pause_pomodoro_session",
-    "continue_pomodoro_session",
-    "reset_pomodoro_session",
-    "show_upcoming_events",
-    "add_calendar_event",
-]
+ToolName = Literal[*TOOL_NAME_ORDER]
 
 
 class ToolCall(TypedDict):
