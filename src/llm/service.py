@@ -1,5 +1,7 @@
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
 from tool_contract import tool_names_one_of_csv
@@ -51,20 +53,61 @@ class PomodoroAssistantLLM:
         if not path:
             return self._default_system_message()
 
-        try:
-            with open(path, "r", encoding="utf-8") as file:
-                content = file.read().strip()
-            if content:
-                return content
-            self._logger.warning("LLM_SYSTEM_PROMPT file is empty: %s", path)
-        except OSError as error:
+        attempted = self._candidate_system_prompt_paths(path)
+        last_error: Optional[OSError] = None
+        for candidate in attempted:
+            try:
+                with open(candidate, "r", encoding="utf-8") as file:
+                    content = file.read().strip()
+                if content:
+                    return content
+                self._logger.warning("LLM_SYSTEM_PROMPT file is empty: %s", candidate)
+            except OSError as error:
+                last_error = error
+
+        if last_error is not None:
             self._logger.warning(
                 "Failed to read LLM_SYSTEM_PROMPT=%s (%s). Falling back to default.",
                 path,
-                error,
+                last_error,
             )
 
         return self._default_system_message()
+
+    @staticmethod
+    def _candidate_system_prompt_paths(path: str) -> list[str]:
+        raw = path.strip()
+        if not raw:
+            return []
+
+        source = Path(raw).expanduser()
+        candidates: list[Path] = []
+
+        def append_unique(value: Path) -> None:
+            if value not in candidates:
+                candidates.append(value)
+
+        append_unique(source)
+
+        bundle_root_raw = getattr(sys, "_MEIPASS", None)
+        if isinstance(bundle_root_raw, str) and bundle_root_raw:
+            bundle_root = Path(bundle_root_raw)
+
+            if not source.is_absolute():
+                append_unique(bundle_root / source)
+
+            try:
+                prompts_index = source.parts.index("prompts")
+            except ValueError:
+                prompts_index = -1
+
+            if prompts_index >= 0:
+                append_unique(bundle_root / Path(*source.parts[prompts_index:]))
+
+            append_unique(bundle_root / "prompts" / source.name)
+            append_unique(bundle_root / source.name)
+
+        return [str(candidate) for candidate in candidates]
 
     @staticmethod
     def _default_system_message() -> str:

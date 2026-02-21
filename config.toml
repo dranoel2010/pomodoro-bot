@@ -31,22 +31,15 @@ gpu = false
 
 [llm]
 enabled = true
-#hf_filename = "Qwen2.5-3B-Instruct-Q4_K_M.gguf"
-#hf_repo_id = "Qwen/Qwen2.5-3B-Instruct-GGUF"
-#hf_filename = "Qwen3-30B-A3B-Instruct-2507-Q4_K_S-3.92bpw.gguf"
-#hf_repo_id = "byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF"
-#hf_filename = "Qwen3-1.7B-Q8_0.gguf"
-#hf_repo_id = "Qwen/Qwen3-1.7B-GGUF"
-hf_filename = "Qwen3-1.7B-Q4_K_M.gguf"
-hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf"
+model_path = "models/llm/qwen"
+hf_filename = "Qwen3-1.7B-Q4_K_M.gguf"          # Qwen3-1.7B-Q8_0.gguf, Qwen2.5-3B-Instruct-Q4_K_M.gguf, Qwen3-30B-A3B-Instruct-2507-Q4_K_S-3.92bpw.gguf
+hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf" # Qwen/Qwen3-1.7B-GGUF, Qwen/Qwen2.5-3B-Instruct-GGUF  , byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF
 hf_revision = "main"
-model_path = "models/llm/qwen3"
 n_batch = 256
 n_ctx = 2048
 n_threads = 4
 repeat_penalty = 1.1
-#system_prompt = "prompts/system_prompt_qwen2.md"
-system_prompt = "prompts/system_prompt_qwen3.md"
+system_prompt = "prompts/system_prompt.md"
 temperature = 0.2
 top_p = 0.9
 verbose = false

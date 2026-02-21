@@ -115,7 +115,11 @@ def main() -> int:
                 TTSConfig,
                 TTSError,
             )
+        except Exception as error:
+            logger.error("TTS module import error: %s", error)
+            return 1
 
+        try:
             tts_config = TTSConfig.from_settings(app_config.tts)
             tts_engine = PiperTTSEngine(
                 config=tts_config,
