@@ -74,6 +74,21 @@ class CalendarToolsTests(unittest.TestCase):
         self.assertEqual(15, parsed.minute)
         self.assertIsNotNone(parsed.tzinfo)
 
+    def test_parse_calendar_datetime_accepts_relative_german_format(self) -> None:
+        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+            parsed = parse_calendar_datetime("heute 10 Uhr")
+
+        self.assertIsNotNone(parsed)
+        if parsed is None:
+            self.fail("Expected parsed datetime")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=10,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual(expected, parsed)
+
     def test_show_upcoming_events_filters_by_time_range(self) -> None:
         oracle = _OracleStub(
             events=[
@@ -122,6 +137,32 @@ class CalendarToolsTests(unittest.TestCase):
         if not isinstance(start, dt.datetime) or not isinstance(end, dt.datetime):
             self.fail("Expected datetime arguments")
         self.assertEqual(45 * 60, int((end - start).total_seconds()))
+
+    def test_add_calendar_event_accepts_relative_start_time(self) -> None:
+        oracle = _OracleStub(event_id="evt-77")
+        app_config = _AppConfigStub()
+
+        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+            message = handle_calendar_tool_call(
+                tool_name="add_calendar_event",
+                arguments={
+                    "title": "Leo treffen",
+                    "start_time": "heute 10 Uhr",
+                },
+                oracle_service=oracle,
+                app_config=app_config,
+                logger=logging.getLogger("test"),
+            )
+
+        self.assertIn("evt-77", message)
+        self.assertEqual(1, len(oracle.add_calls))
+        start = oracle.add_calls[0]["start"]
+        end = oracle.add_calls[0]["end"]
+        self.assertIsInstance(start, dt.datetime)
+        self.assertIsInstance(end, dt.datetime)
+        if not isinstance(start, dt.datetime) or not isinstance(end, dt.datetime):
+            self.fail("Expected datetime arguments")
+        self.assertEqual(30 * 60, int((end - start).total_seconds()))
 
     def test_calendar_tools_require_oracle_service(self) -> None:
         message = handle_calendar_tool_call(

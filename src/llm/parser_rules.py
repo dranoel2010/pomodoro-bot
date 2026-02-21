@@ -48,7 +48,7 @@ def looks_like_add_calendar(lowered_prompt: str) -> bool:
     has_calendar = bool(re.search(r"\b(kalender|termin|event)\b", lowered_prompt))
     has_create = bool(
         re.search(
-            r"\b(hinzufuegen|hinzufueg|hinzufügen|fuege|füge|hinzu|anlegen|erstellen|eintragen|planen)\b",
+            r"\b(hinzufuegen|hinzufueg|hinzufügen|fuege|füge|hinzu|anlegen|erstell(?:e|en|t)?|eintragen|planen)\b",
             lowered_prompt,
         )
     )

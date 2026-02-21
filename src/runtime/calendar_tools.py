@@ -37,23 +37,55 @@ def parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
     if not raw:
         return None
 
-    raw = raw.replace(" ", "T")
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
+    iso_candidate = raw.replace(" ", "T")
+    if iso_candidate.endswith("Z"):
+        iso_candidate = iso_candidate[:-1] + "+00:00"
     try:
-        parsed = dt.datetime.fromisoformat(raw)
+        parsed = dt.datetime.fromisoformat(iso_candidate)
     except ValueError:
-        de_match = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})T(\d{1,2}):(\d{2})$", raw)
-        if not de_match:
-            return None
-        day, month, year, hour, minute = de_match.groups()
-        parsed = dt.datetime(
-            year=int(year),
-            month=int(month),
-            day=int(day),
-            hour=int(hour),
-            minute=int(minute),
+        de_match = re.match(
+            r"^(\d{1,2})\.(\d{1,2})\.(\d{4})\s*(?:um|,)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?$",
+            raw,
+            re.I,
         )
+        if de_match:
+            day, month, year, hour_raw, minute_raw = de_match.groups()
+            hour = int(hour_raw)
+            minute = int(minute_raw or "0")
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return None
+            try:
+                parsed = dt.datetime(
+                    year=int(year),
+                    month=int(month),
+                    day=int(day),
+                    hour=hour,
+                    minute=minute,
+                )
+            except ValueError:
+                return None
+        else:
+            relative_match = re.match(
+                r"^(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?$",
+                raw,
+                re.I,
+            )
+            if not relative_match:
+                return None
+            day_token, hour_raw, minute_raw = relative_match.groups()
+            hour = int(hour_raw)
+            minute = int(minute_raw or "0")
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return None
+            day_key = day_token.lower()
+            offset_days = {"heute": 0, "morgen": 1, "uebermorgen": 2, "übermorgen": 2}
+            now = dt.datetime.now().astimezone()
+            parsed = (now + dt.timedelta(days=offset_days[day_key])).replace(
+                hour=hour,
+                minute=minute,
+                second=0,
+                microsecond=0,
+            )
 
     if parsed.tzinfo is None:
         local_tz = dt.datetime.now().astimezone().tzinfo or dt.timezone.utc

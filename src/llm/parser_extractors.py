@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Callable, Optional
 
@@ -11,6 +11,95 @@ def sanitize_text(value: Any, *, max_len: int) -> str:
     text = str(value).strip()
     text = re.sub(r"\s+", " ", text)
     return text[:max_len].strip()
+
+
+def _resolve_reference_now(now_fn: Optional[Callable[[], datetime]]) -> datetime:
+    reference = now_fn() if now_fn is not None else datetime.now().astimezone()
+    if reference.tzinfo is None:
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+        return reference.replace(tzinfo=local_tz)
+    return reference
+
+
+def _ensure_timezone(
+    value: datetime,
+    *,
+    now_fn: Optional[Callable[[], datetime]] = None,
+) -> datetime:
+    if value.tzinfo is not None:
+        return value
+    reference = _resolve_reference_now(now_fn)
+    return value.replace(tzinfo=reference.tzinfo or timezone.utc)
+
+
+def normalize_calendar_datetime_input(
+    value: Any,
+    *,
+    now_fn: Optional[Callable[[], datetime]] = None,
+) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+
+    iso_candidate = raw.replace(" ", "T")
+    if iso_candidate.endswith("Z"):
+        iso_candidate = iso_candidate[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(iso_candidate)
+        parsed = _ensure_timezone(parsed, now_fn=now_fn)
+        return parsed.isoformat(timespec="minutes")
+    except ValueError:
+        pass
+
+    de_match = re.fullmatch(
+        r"(\d{1,2})\.(\d{1,2})\.(\d{4})\s*(?:um|,)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?",
+        raw,
+        re.I,
+    )
+    if de_match:
+        day, month, year, hour_raw, minute_raw = de_match.groups()
+        hour = int(hour_raw)
+        minute = int(minute_raw or "0")
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        try:
+            parsed = datetime(
+                year=int(year),
+                month=int(month),
+                day=int(day),
+                hour=hour,
+                minute=minute,
+            )
+        except ValueError:
+            return None
+        parsed = _ensure_timezone(parsed, now_fn=now_fn)
+        return parsed.isoformat(timespec="minutes")
+
+    relative_match = re.fullmatch(
+        r"(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?",
+        raw,
+        re.I,
+    )
+    if relative_match:
+        day_token, hour_raw, minute_raw = relative_match.groups()
+        hour = int(hour_raw)
+        minute = int(minute_raw or "0")
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        day_key = day_token.lower()
+        offset_days = {"heute": 0, "morgen": 1, "uebermorgen": 2, "übermorgen": 2}
+        base = _resolve_reference_now(now_fn)
+        target = (base + timedelta(days=offset_days[day_key])).replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0,
+        )
+        return target.isoformat(timespec="minutes")
+
+    return None
 
 
 def normalize_duration(value: Any) -> Optional[str]:
@@ -139,7 +228,10 @@ def extract_datetime_literal(
         prompt,
     )
     if iso_match:
-        return iso_match.group(1).replace(" ", "T")
+        return normalize_calendar_datetime_input(
+            iso_match.group(1),
+            now_fn=now_fn,
+        )
 
     de_match = re.search(
         r"\b(\d{1,2}\.\d{1,2}\.\d{4})\s*(?:um|,)?\s*(\d{1,2}:\d{2})\b",
@@ -148,8 +240,10 @@ def extract_datetime_literal(
     )
     if de_match:
         date_part, time_part = de_match.groups()
-        day, month, year = date_part.split(".")
-        return f"{year}-{int(month):02d}-{int(day):02d}T{time_part}"
+        return normalize_calendar_datetime_input(
+            f"{date_part} {time_part}",
+            now_fn=now_fn,
+        )
 
     relative_match = re.search(
         r"\b(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?::(\d{2}))?\s*uhr?\b",
@@ -158,18 +252,10 @@ def extract_datetime_literal(
     )
     if relative_match:
         day_token, hour_raw, minute_raw = relative_match.groups()
-        day_key = day_token.lower()
-        offset_days = {"heute": 0, "morgen": 1, "uebermorgen": 2, "übermorgen": 2}
-        hour = int(hour_raw)
-        minute = int(minute_raw or "0")
-        if 0 <= hour <= 23 and 0 <= minute <= 59:
-            now = now_fn() if now_fn is not None else datetime.now().astimezone()
-            target = (now + timedelta(days=offset_days[day_key])).replace(
-                hour=hour,
-                minute=minute,
-                second=0,
-                microsecond=0,
-            )
-            return target.isoformat(timespec="minutes")
+        minute = minute_raw or "00"
+        return normalize_calendar_datetime_input(
+            f"{day_token} {hour_raw}:{minute}",
+            now_fn=now_fn,
+        )
 
     return None
