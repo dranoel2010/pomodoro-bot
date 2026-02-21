@@ -10,7 +10,9 @@ const pomodoroPanel = document.getElementById("pomodoro-panel");
 const pomodoroSession = document.getElementById("pomodoro-session");
 const pomodoroTimer = document.getElementById("pomodoro-timer");
 const pomodoroPhase = document.getElementById("pomodoro-phase");
-const pomodoroMotivation = document.getElementById("pomodoro-motivation");
+const timerPanel = document.getElementById("timer-panel");
+const timerRemaining = document.getElementById("timer-remaining");
+const timerPhase = document.getElementById("timer-phase");
 
 const runtimeStateLabels = {
     idle: "IDLE",
@@ -29,13 +31,26 @@ const pomodoroPhaseLabels = {
     aborted: "ABORTED",
 };
 
+const timerPhaseLabels = {
+    idle: "IDLE",
+    running: "RUNNING",
+    paused: "PAUSED",
+    completed: "COMPLETED",
+    aborted: "ABORTED",
+};
+
 const pomodoroState = {
     phase: "idle",
     session: "",
     durationSeconds: 1500,
     anchorRemainingSeconds: 1500,
     anchorTimestampMs: Date.now(),
-    motivation: "Start a session to lock in your focus.",
+};
+
+const timerState = {
+    phase: "idle",
+    anchorRemainingSeconds: 0,
+    anchorTimestampMs: Date.now(),
 };
 
 function setState(state) {
@@ -51,7 +66,7 @@ function setState(state) {
     mainStatus.textContent = runtimeStateLabels[state] || state.toUpperCase();
 }
 
-function setStatusMessage(message) {
+function setConnectionStatus(message) {
     if (typeof message === "string" && message.trim()) {
         envStatus.textContent = message.trim();
     }
@@ -63,7 +78,13 @@ function clearError() {
 }
 
 function showError(message) {
-    errorStatus.textContent = `ERROR: ${message}`;
+    const normalized = typeof message === "string" ? message.trim() : "";
+    if (!normalized || normalized === "-") {
+        clearError();
+        return;
+    }
+
+    errorStatus.textContent = `ERROR: ${normalized}`;
     errorStatus.style.display = "block";
 }
 
@@ -78,6 +99,16 @@ function isPomodoroFocusPhase(phase) {
     return phase === "running" || phase === "paused";
 }
 
+function parseEventTimestampMs(payload) {
+    if (typeof payload?.timestamp === "string") {
+        const parsed = Date.parse(payload.timestamp);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return Date.now();
+}
+
 function currentPomodoroRemaining() {
     if (pomodoroState.phase !== "running") {
         return pomodoroState.anchorRemainingSeconds;
@@ -85,6 +116,29 @@ function currentPomodoroRemaining() {
 
     const elapsedSeconds = Math.floor((Date.now() - pomodoroState.anchorTimestampMs) / 1000);
     return Math.max(0, pomodoroState.anchorRemainingSeconds - elapsedSeconds);
+}
+
+function currentTimerRemaining() {
+    if (timerState.phase !== "running") {
+        return timerState.anchorRemainingSeconds;
+    }
+
+    const elapsedSeconds = Math.floor((Date.now() - timerState.anchorTimestampMs) / 1000);
+    return Math.max(0, timerState.anchorRemainingSeconds - elapsedSeconds);
+}
+
+function renderTimer() {
+    const remainingSeconds = currentTimerRemaining();
+    const effectivePhase =
+        timerState.phase === "running" && remainingSeconds === 0
+            ? "completed"
+            : timerState.phase;
+
+    timerRemaining.textContent = formatDuration(remainingSeconds);
+    timerPhase.textContent = timerPhaseLabels[effectivePhase] || effectivePhase.toUpperCase();
+
+    const isVisible = effectivePhase === "running" || effectivePhase === "paused";
+    timerPanel.classList.toggle("active", isVisible);
 }
 
 function renderPomodoro() {
@@ -126,30 +180,39 @@ function applyPomodoroUpdate(payload) {
         payload.remaining_seconds >= 0
     ) {
         pomodoroState.anchorRemainingSeconds = Math.floor(payload.remaining_seconds);
-        pomodoroState.anchorTimestampMs = Date.now();
-    }
-
-    if (typeof payload.motivation === "string" && payload.motivation.trim()) {
-        pomodoroState.motivation = payload.motivation.trim();
-        pomodoroMotivation.textContent = pomodoroState.motivation;
-    }
-
-    if (!pomodoroMotivation.textContent.trim()) {
-        pomodoroMotivation.textContent = "Start a session to lock in your focus.";
+        pomodoroState.anchorTimestampMs = parseEventTimestampMs(payload);
     }
 
     renderPomodoro();
 }
 
+function applyTimerUpdate(payload) {
+    if (typeof payload.phase === "string" && payload.phase.trim()) {
+        timerState.phase = payload.phase.trim();
+    }
+
+    if (
+        typeof payload.remaining_seconds === "number" &&
+        Number.isFinite(payload.remaining_seconds) &&
+        payload.remaining_seconds >= 0
+    ) {
+        timerState.anchorRemainingSeconds = Math.floor(payload.remaining_seconds);
+        timerState.anchorTimestampMs = parseEventTimestampMs(payload);
+    }
+
+    renderTimer();
+}
+
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
+    setConnectionStatus("CONNECTION: CONNECTING...");
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
         wsIndicator.textContent = "WS: CONNECTED";
         wsIndicator.style.color = "#00ff00";
-        setStatusMessage("Connected to runtime");
+        setConnectionStatus("CONNECTION: CONNECTED");
         clearError();
     };
 
@@ -159,10 +222,6 @@ function connectWebSocket() {
             payload = JSON.parse(event.data);
         } catch (_) {
             return;
-        }
-
-        if (typeof payload.message === "string") {
-            setStatusMessage(payload.message);
         }
 
         const nextState = payload?.state;
@@ -185,6 +244,10 @@ function connectWebSocket() {
             applyPomodoroUpdate(payload);
         }
 
+        if (payload?.type === "timer") {
+            applyTimerUpdate(payload);
+        }
+
         if (payload?.type === "error") {
             const message = typeof payload.message === "string" ? payload.message : "Unknown error";
             showError(message);
@@ -194,13 +257,14 @@ function connectWebSocket() {
     socket.onclose = () => {
         wsIndicator.textContent = "WS: RETRYING...";
         wsIndicator.style.color = "#ff4d00";
-        setStatusMessage("Connection lost, retrying...");
+        setConnectionStatus("CONNECTION: RETRYING...");
         setTimeout(connectWebSocket, 2000);
     };
 
     socket.onerror = () => {
         wsIndicator.textContent = "WS: ERROR";
         wsIndicator.style.color = "#ff4d00";
+        setConnectionStatus("CONNECTION: ERROR");
     };
 }
 
@@ -208,8 +272,12 @@ setInterval(() => {
     if (pomodoroState.phase === "running") {
         renderPomodoro();
     }
+    if (timerState.phase === "running") {
+        renderTimer();
+    }
 }, 250);
 
 clearError();
 renderPomodoro();
+renderTimer();
 connectWebSocket();

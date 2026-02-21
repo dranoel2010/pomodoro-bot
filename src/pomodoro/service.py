@@ -52,7 +52,8 @@ class PomodoroTimer:
         if duration_seconds <= 0:
             raise ValueError("duration_seconds must be greater than zero")
 
-        self._duration_seconds = int(duration_seconds)
+        self._default_duration_seconds = int(duration_seconds)
+        self._duration_seconds = self._default_duration_seconds
         self._logger = logger or logging.getLogger("pomodoro")
         self._lock = threading.Lock()
 
@@ -68,16 +69,30 @@ class PomodoroTimer:
         with self._lock:
             return self._snapshot_locked(time.monotonic())
 
-    def apply(self, action: PomodoroAction, *, session: Optional[str] = None) -> PomodoroActionResult:
+    def apply(
+        self,
+        action: PomodoroAction,
+        *,
+        session: Optional[str] = None,
+        duration_seconds: Optional[int] = None,
+    ) -> PomodoroActionResult:
         with self._lock:
             now = time.monotonic()
             if action == "start":
-                self._start_locked(now, session=session)
+                self._start_locked(
+                    now,
+                    session=session,
+                    duration_seconds=duration_seconds,
+                )
                 return self._result_locked(action, True, "started", now)
 
             if action == "reset":
                 reset_session = session or self._session or "Focus"
-                self._start_locked(now, session=reset_session)
+                self._start_locked(
+                    now,
+                    session=reset_session,
+                    duration_seconds=duration_seconds,
+                )
                 return self._result_locked(action, True, "reset", now)
 
             if action == "pause":
@@ -150,7 +165,16 @@ class PomodoroTimer:
             self._last_emitted_remaining = remaining
             return PomodoroTick(snapshot=self._snapshot_locked(now), completed=False)
 
-    def _start_locked(self, now: float, *, session: Optional[str]) -> None:
+    def _start_locked(
+        self,
+        now: float,
+        *,
+        session: Optional[str],
+        duration_seconds: Optional[int] = None,
+    ) -> None:
+        if duration_seconds is not None and int(duration_seconds) > 0:
+            self._duration_seconds = int(duration_seconds)
+
         session_name = _sanitize_session_name(session or self._session or "Focus")
         self._session = session_name
         self._phase = "running"

@@ -121,6 +121,7 @@ class UIServer:
         if event_type in {
             "state_update",
             "pomodoro",
+            "timer",
             "transcript",
             "assistant_reply",
             "error",
@@ -307,7 +308,14 @@ class UIServer:
         )
 
     def _sticky_snapshot(self) -> list[str]:
-        order = ("state_update", "pomodoro", "transcript", "assistant_reply", "error")
+        order = (
+            "state_update",
+            "pomodoro",
+            "timer",
+            "transcript",
+            "assistant_reply",
+            "error",
+        )
         with self._sticky_lock:
             return [self._sticky_events[key] for key in order if key in self._sticky_events]
 

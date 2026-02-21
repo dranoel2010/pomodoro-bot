@@ -150,13 +150,50 @@ body.light-dark {
     text-transform: uppercase;
 }
 
-.pomodoro-motivation {
-    margin: 16px auto 0;
-    max-width: min(90vw, 860px);
-    font-size: clamp(0.82rem, 1.8vw, 1.15rem);
-    line-height: 1.45;
-    letter-spacing: 1px;
-    opacity: 0.95;
+.timer-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    min-width: 170px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 242, 255, 0.45);
+    border-radius: 12px;
+    background: rgba(0, 242, 255, 0.08);
+    color: var(--glow-color);
+    text-align: right;
+    text-shadow: 0 0 5px var(--glow-color);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 25;
+}
+
+.timer-panel.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.timer-title {
+    font-size: 0.62rem;
+    letter-spacing: 2px;
+    opacity: 0.85;
+}
+
+.timer-remaining {
+    margin-top: 4px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 1;
+}
+
+.timer-phase {
+    margin-top: 6px;
+    font-size: 0.58rem;
+    letter-spacing: 2px;
+    opacity: 0.85;
 }
 
 .conversation-display {
@@ -373,6 +410,17 @@ svg {
 
     .connection-line {
         max-width: 56vw;
+    }
+
+    .timer-panel {
+        top: 12px;
+        right: 12px;
+        min-width: 140px;
+        padding: 8px 10px;
+    }
+
+    .timer-remaining {
+        font-size: 1.18rem;
     }
 
     .conversation-display {

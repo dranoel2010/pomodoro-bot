@@ -74,7 +74,7 @@ class OracleContextService:
                     self._calendar = GoogleCalendar(
                         calendar_id=self._config.calendar_id,
                         service_account_file=self._config.calendar_service_account_file,
-                        read_only=True,
+                        read_only=False,
                         logger=self._logger.getChild("calendar"),
                     )
                     self._logger.info("Google Calendar integration enabled")
@@ -154,3 +154,30 @@ class OracleContextService:
         except Exception as error:
             self._logger.warning("Failed to read Google Calendar data: %s", error)
             return self._calendar_cache
+
+    def list_upcoming_events(
+        self,
+        *,
+        max_results: Optional[int] = None,
+        time_min: Optional[datetime] = None,
+    ) -> list[dict[str, Any]]:
+        if self._calendar is None:
+            raise RuntimeError("Google Calendar integration is not available.")
+
+        limit = (
+            int(max_results)
+            if isinstance(max_results, int) and max_results > 0
+            else self._config.calendar_max_results
+        )
+        return self._calendar.get_events(max_results=limit, time_min=time_min)
+
+    def add_event(
+        self,
+        *,
+        title: str,
+        start: datetime,
+        end: datetime,
+    ) -> str:
+        if self._calendar is None:
+            raise RuntimeError("Google Calendar integration is not available.")
+        return self._calendar.add_event(summary=title, start=start, end=end)

@@ -6,13 +6,18 @@ from typing import Any, Dict, Literal, Optional, TypedDict
 
 
 ToolName = Literal[
-    "timer_start",
-    "timer_pause",
-    "timer_continue",
-    "timer_abort",
-    # Backward-compatible aliases:
-    "timer_stop",
-    "timer_reset",
+    "start_timer",
+    "stop_timer",
+    "pause_timer",
+    "continue_timer",
+    "reset_timer",
+    "start_pomodoro_session",
+    "stop_pomodoro_session",
+    "pause_pomodoro_session",
+    "continue_pomodoro_session",
+    "reset_pomodoro_session",
+    "show_upcoming_events",
+    "add_calendar_event",
 ]
 
 
