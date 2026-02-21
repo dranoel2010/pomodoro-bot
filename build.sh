@@ -44,7 +44,7 @@ mkdir -p dist
   --clean -y \
   --onefile \
   --name main \
-  --add-data "web_ui/*:web_ui" \
+  --add-data "web_ui:web_ui" \
   --collect-data llama_cpp \
   --collect-binaries llama_cpp \
   --collect-data pvporcupine \

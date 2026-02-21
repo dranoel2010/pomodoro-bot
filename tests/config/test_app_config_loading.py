@@ -39,6 +39,7 @@ class AppConfigLoadingTests(unittest.TestCase):
                     system_prompt = "prompts/system.md"
 
                     [ui_server]
+                    ui = "miro"
                     index_file = "web/index.html"
                     """
                 ).strip(),
@@ -67,6 +68,46 @@ class AppConfigLoadingTests(unittest.TestCase):
                 str((root / "web/index.html").resolve()),
                 app_config.ui_server.index_file,
             )
+            self.assertEqual("miro", app_config.ui_server.ui)
+
+    def test_load_app_config_uses_default_ui_variant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+                    """
+                ).strip(),
+            )
+
+            app_config = load_app_config(str(config_path))
+            self.assertEqual("jarvis", app_config.ui_server.ui)
+
+    def test_load_app_config_rejects_unknown_ui_variant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [ui_server]
+                    ui = "retro"
+                    """
+                ).strip(),
+            )
+
+            with self.assertRaises(AppConfigurationError) as context:
+                load_app_config(str(config_path))
+
+            self.assertIn("ui_server.ui", str(context.exception))
 
     def test_load_app_config_rejects_secret_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

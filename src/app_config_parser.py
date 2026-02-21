@@ -14,6 +14,8 @@ from app_config_schema import (
     WakeWordSettings,
 )
 
+_ALLOWED_UI_VARIANTS = {"jarvis", "miro"}
+
 
 def parse_app_config(
     raw: Mapping[str, Any],
@@ -120,11 +122,13 @@ def parse_app_config(
     )
 
     ui_raw = _section(raw, "ui_server")
+    ui = _as_ui_name(ui_raw.get("ui", "jarvis"), "ui_server.ui")
     index_file = _as_str(ui_raw.get("index_file", ""), "ui_server.index_file")
     ui_server = UIServerSettings(
         enabled=_as_bool(ui_raw.get("enabled", True), "ui_server.enabled"),
         host=_as_str(ui_raw.get("host", "127.0.0.1"), "ui_server.host"),
         port=_as_int(ui_raw.get("port", 8765), "ui_server.port"),
+        ui=ui,
         index_file=_resolve_path(base_dir, index_file) if index_file else "",
     )
 
@@ -263,6 +267,14 @@ def _as_float(value: Any, field: str) -> float:
         except ValueError as error:
             raise AppConfigurationError(f"{field} must be a float.") from error
     raise AppConfigurationError(f"{field} must be a float.")
+
+
+def _as_ui_name(value: Any, field: str) -> str:
+    name = _as_str(value, field).lower()
+    if name not in _ALLOWED_UI_VARIANTS:
+        allowed = ", ".join(sorted(_ALLOWED_UI_VARIANTS))
+        raise AppConfigurationError(f"{field} must be one of: {allowed}.")
+    return name
 
 
 def _resolve_path(base_dir: Path, raw: str) -> str:

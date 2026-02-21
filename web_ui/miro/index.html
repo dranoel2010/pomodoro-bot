@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MIRO · Cute Status Face</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+
+<main class="miro-shell">
+  <div class="stage">
+    <div class="stage-bg"></div>
+    <div class="air-tint"></div>
+    <!-- Cheek blush (bad air) -->
+    <div class="cheek-blush" id="cheekBlush"></div>
+
+    <!-- Particles (bad air) -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Light beams (light mode) -->
+    <div class="light-beams">
+      <div class="beam"></div>
+      <div class="beam"></div>
+      <div class="beam"></div>
+    </div>
+
+    <!-- Stars (dark mode) -->
+    <div class="stars" id="stars"></div>
+
+    <!-- SVG Face -->
+    <svg class="face-svg" viewBox="0 0 290 250" id="faceSvg">
+      <g class="face-group s-idle" id="faceGroup">
+
+        <!-- Left eye + glints as a group so they animate together -->
+        <g class="eye-el s-idle" id="eyeL" style="transform-origin:69px 98px;">
+          <ellipse cx="69" cy="98" rx="48" ry="42"
+            fill="var(--face-ink)" style="transition:fill var(--transition);"/>
+          <ellipse class="eye-glint-big"   cx="83" cy="80" rx="9"   ry="8"   fill="white"/>
+          <ellipse class="eye-glint-small" cx="96" cy="90" rx="4"   ry="3.5" fill="white"/>
+        </g>
+
+        <!-- Nose -->
+        <g class="nose-group s-idle" id="noseGroup">
+          <ellipse cx="145" cy="117" rx="14" ry="10" fill="var(--face-ink)" style="transition:fill var(--transition);"/>
+          <ellipse cx="138" cy="112" rx="4" ry="3" fill="var(--face-bg)" opacity="0.35" style="transition:fill var(--transition);"/>
+          <ellipse cx="152" cy="112" rx="4" ry="3" fill="var(--face-bg)" opacity="0.35" style="transition:fill var(--transition);"/>
+        </g>
+
+        <!-- Right eye + glints as a group so they animate together -->
+        <g class="eye-el s-idle" id="eyeR" style="transform-origin:221px 98px;">
+          <ellipse cx="221" cy="98" rx="48" ry="42"
+            fill="var(--face-ink)" style="transition:fill var(--transition);"/>
+          <ellipse class="eye-glint-big"   cx="235" cy="80" rx="9"   ry="8"   fill="white"/>
+          <ellipse class="eye-glint-small" cx="248" cy="90" rx="4"   ry="3.5" fill="white"/>
+        </g>
+
+        <!-- Mouth -->
+        <g id="mouthGroup" style="transform-origin:145px 175px;">
+          <path id="mouthPath" fill="var(--face-ink)"
+            d="M 112 168 A 33 23 0 0 0 178 168 Z"
+            style="transition: fill var(--transition), d 0.4s ease;"/>
+        </g>
+
+        <!-- ZZZ (sleep) -->
+        <g class="zzz-group" id="zzzGroup" style="display:none;">
+          <text class="zzz" x="200" y="68">z</text>
+          <text class="zzz" x="212" y="52" style="font-size:14px;">z</text>
+          <text class="zzz" x="226" y="32" style="font-size:17px;">Z</text>
+        </g>
+
+      </g>
+    </svg>
+
+    <div class="pomodoro-card" id="pomodoroCard" aria-live="polite">
+      <div class="pomodoro-icon" id="pomodoroIcon">🍅</div>
+      <p class="pomodoro-phase" id="pomodoroPhase">Focus</p>
+      <p class="pomodoro-session" id="pomodoroSession">Pomodoro Session</p>
+      <p class="pomodoro-time" id="pomodoroTime">25:00</p>
+      <div class="pomodoro-progress-track">
+        <div class="pomodoro-progress-fill" id="pomodoroProgressFill"></div>
+      </div>
+    </div>
+
+    <div class="timer-bubble" id="timerBubble" aria-live="polite">
+      <p class="timer-title" id="timerTitle">Timer</p>
+      <p class="timer-time" id="timerTime">10:00</p>
+    </div>
+  </div>
+
+  <div class="status-strip">
+    <span class="badge ws-connecting" id="badgeWs">WS: connecting</span>
+    <span class="badge state" id="badgeRuntime">State: idle</span>
+  </div>
+</main>
+
+<script src="/app.js" defer></script>
+</body>
+</html>

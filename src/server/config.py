@@ -10,11 +10,19 @@ class ServerConfigurationError(Exception):
 
 
 WEBSOCKET_PATH = "/ws"
+_UI_INDEX_FILES = {
+    "jarvis": Path("web_ui") / "jarvis" / "index.html",
+    "miro": Path("web_ui") / "miro" / "index.html",
+}
 
 
-def _default_index_file() -> Path:
+def _default_index_file(ui: str) -> Path:
+    relative_path = _UI_INDEX_FILES.get(ui)
+    if relative_path is None:
+        allowed = ", ".join(sorted(_UI_INDEX_FILES))
+        raise ServerConfigurationError(f"UI_SERVER_UI must be one of: {allowed}")
     base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
-    return base_dir / "web_ui" / "jarvis" / "index.html"
+    return base_dir / relative_path
 
 
 @dataclass(frozen=True)
@@ -22,6 +30,7 @@ class UIServerConfig:
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8765
+    ui: str = "jarvis"
     index_file: str = ""
 
     def __post_init__(self) -> None:
@@ -32,6 +41,10 @@ class UIServerConfig:
             raise ServerConfigurationError(
                 f"UI_SERVER_PORT must be in [1, 65535], got: {self.port}"
             )
+
+        if self.ui not in _UI_INDEX_FILES:
+            allowed = ", ".join(sorted(_UI_INDEX_FILES))
+            raise ServerConfigurationError(f"UI_SERVER_UI must be one of: {allowed}")
 
         if self.enabled:
             if not self.index_file:
@@ -51,12 +64,15 @@ class UIServerConfig:
 
     @classmethod
     def from_settings(cls, settings) -> "UIServerConfig":
+        raw_ui = getattr(settings, "ui", "jarvis")
+        ui = raw_ui.strip().lower() if raw_ui else "jarvis"
         index_file = settings.index_file.strip() if settings.index_file else ""
         if not index_file:
-            index_file = str(_default_index_file())
+            index_file = str(_default_index_file(ui))
         return cls(
             enabled=bool(settings.enabled),
             host=settings.host,
             port=settings.port,
+            ui=ui,
             index_file=index_file,
         )

@@ -7,7 +7,7 @@ Current runtime pipeline:
 - transcription (`faster-whisper`)
 - optional local LLM response (`llm`)
 - optional TTS playback (`tts`)
-- built-in UI server (`server`) serving `web_ui/index.html` + websocket updates
+- built-in UI server (`server`) serving `web_ui/<ui>/index.html` + websocket updates
 
 ## Project layout
 
@@ -18,7 +18,7 @@ Current runtime pipeline:
 - `src/oracle/`: optional environment context providers (sensors + calendar).
 - `src/pomodoro/`: pomodoro session runtime (`start/pause/continue/abort`) and countdown state.
 - `src/server/`: static UI + websocket server runtime.
-- `web_ui/`: browser UI (`index.html`) served by `src/server`.
+- `web_ui/`: browser UIs (`jarvis/`, `miro/`) served by `src/server`.
 - `src/audio-diagnostic.py`: VAD tuning utility.
 - `setup.sh`: uv-based env bootstrap.
 - `build.sh`: one-file build script (PyInstaller).
@@ -69,6 +69,10 @@ The repo now includes a default `config.toml` with sections for:
 - `llm`
 - `ui_server`
 - `oracle`
+
+UI selection settings:
+- `ui_server.ui`: built-in UI variant (`jarvis` or `miro`)
+- `ui_server.index_file`: optional explicit index file path override
 
 Required first edit in `config.toml`:
 - `wake_word.ppn_file`

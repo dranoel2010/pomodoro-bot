@@ -68,6 +68,7 @@ class UIServerSettings:
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8765
+    ui: str = "jarvis"
     index_file: str = ""
 
 
