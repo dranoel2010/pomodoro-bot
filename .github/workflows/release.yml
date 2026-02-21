@@ -57,6 +57,10 @@ jobs:
               python3 -m pip install --upgrade pip
               python3 -m pip install uv
 
+              # Avoid QEMU/native CPU feature mis-detection when building llama-cpp-python
+              # (prevents unsupported ARM dotprod instructions during arm64 emulated builds).
+              export CMAKE_ARGS="${CMAKE_ARGS:-} -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8-a -DGGML_CPU_ALL_VARIANTS=OFF"
+
               chmod +x ./build.sh
               ./build.sh
             '
