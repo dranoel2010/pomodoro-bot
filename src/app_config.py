@@ -48,7 +48,9 @@ class STTSettings:
 class TTSSettings:
     enabled: bool = False
     model_path: str = ""
-    config_path: str = ""
+    hf_filename: str = ""
+    hf_repo_id: str = ""
+    hf_revision: str = "main"
     gpu: bool = False
     output_device: Optional[int] = None
 
@@ -214,9 +216,10 @@ def load_app_config(config_path: str | None = None) -> AppConfig:
             base_dir,
             _as_str(tts_raw.get("model_path", ""), "tts.model_path"),
         ),
-        config_path=_resolve_path(
-            base_dir,
-            _as_str(tts_raw.get("config_path", ""), "tts.config_path"),
+        hf_filename=_as_str(tts_raw.get("hf_filename", ""), "tts.hf_filename"),
+        hf_repo_id=_as_str(tts_raw.get("hf_repo_id", ""), "tts.hf_repo_id"),
+        hf_revision=(
+            _as_str(tts_raw.get("hf_revision", "main"), "tts.hf_revision") or "main"
         ),
         gpu=_as_bool(tts_raw.get("gpu", False), "tts.gpu"),
         output_device=(

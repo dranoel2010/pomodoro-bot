@@ -27,7 +27,7 @@ from stt import (
     WakeWordService,
 )
 from tts import (
-    CoquiTTSEngine,
+    PiperTTSEngine,
     SoundDeviceAudioOutput,
     SpeechService,
     TTSConfig,
@@ -195,7 +195,7 @@ def main() -> int:
     if app_config.tts.enabled:
         try:
             tts_config = TTSConfig.from_settings(app_config.tts)
-            tts_engine = CoquiTTSEngine(
+            tts_engine = PiperTTSEngine(
                 config=tts_config,
                 logger=logging.getLogger("tts.engine"),
             )

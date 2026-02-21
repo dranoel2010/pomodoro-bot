@@ -1,14 +1,14 @@
 import logging
 from typing import Optional
 
-from .engine import CoquiTTSEngine
+from .engine import PiperTTSEngine
 from .output import SoundDeviceAudioOutput
 
 
 class SpeechService:
     def __init__(
         self,
-        engine: CoquiTTSEngine,
+        engine: PiperTTSEngine,
         output: SoundDeviceAudioOutput,
         logger: Optional[logging.Logger] = None,
     ):

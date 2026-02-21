@@ -22,9 +22,11 @@ vad_filter = true
 
 [tts]
 enabled = true
-config_path = "models/tts/thorsten_vits/config.json"
+hf_filename = "de_DE-thorsten-high.onnx"
+hf_repo_id = "Thorsten-Voice/Piper"
+hf_revision = "main"
+model_path = "models/tts/thorsten-piper"
 gpu = false
-model_path = "models/tts/thorsten_vits/model_file.pth"
 # output_device = 0
 
 [llm]

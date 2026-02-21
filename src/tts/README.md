@@ -4,29 +4,25 @@ Text-to-speech synthesis and playback module.
 
 ## Purpose
 
-- Load Coqui TTS model assets.
+- Load Piper TTS model assets.
 - Synthesize text to mono PCM audio.
 - Play synthesized audio through `sounddevice`.
 
 ## Main components
 
 - `config.py`: `TTSConfig` from environment.
-- `engine.py`: `CoquiTTSEngine` and `TTSError`.
+- `engine.py`: `PiperTTSEngine` and `TTSError`.
 - `output.py`: `SoundDeviceAudioOutput`.
 - `service.py`: `SpeechService` orchestration.
 
 ## Environment variables
 
-Required when `TTS_ENABLED=true`:
-- `TTS_MODEL_PATH`: path to model weights file.
-- `TTS_CONFIG_PATH`: path to model config file.
-
-Optional:
-- `TTS_ENABLED`: enable TTS in `src/main.py` (`true`/`false`).
-- `TTS_OUTPUT_DEVICE`: numeric output device index for `sounddevice`.
-- `TTS_GPU`: use GPU (`true`/`false`).
-- `TTS_HF_REPO_ID`: Hugging Face repo for fallback download if local files are missing.
-- `TTS_HF_LOCAL_DIR`: directory where fallback download is stored.
+Configured via `[tts]` in `config.toml`:
+- `model_path`: local directory for Piper model files.
+- `hf_filename`: ONNX model filename (for example `de_DE-thorsten-high.onnx`).
+- `hf_repo_id`: optional Hugging Face repo used for auto-download when files are missing.
+- `hf_revision`: optional model revision (defaults to `main`).
+- `output_device`: optional output device index for `sounddevice`.
 
 ## Integration
 

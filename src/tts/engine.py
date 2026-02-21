@@ -1,9 +1,11 @@
 import logging
-import os
-from typing import Optional
-
+import shutil
+from pathlib import Path
+from typing import Any, Optional
+from piper.voice import PiperVoice
 import numpy as np
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
 
 from .config import TTSConfig
 
@@ -14,7 +16,7 @@ class TTSError(Exception):
     pass
 
 
-class CoquiTTSEngine:
+class PiperTTSEngine:
     def __init__(
         self,
         config: TTSConfig,
@@ -22,77 +24,183 @@ class CoquiTTSEngine:
     ):
         self._config = config
         self._logger = logger or logging.getLogger(__name__)
-        model_path, config_path = self._ensure_model_files()
+        model_path = self._ensure_model_files()
 
         try:
-            from TTS.api import TTS
-
-            self._tts = TTS(
-                model_path=model_path,
-                config_path=config_path,
-                gpu=self._config.gpu,
-                progress_bar=False,
-            )
+            self._voice = PiperVoice.load(str(model_path))
+            self._sample_rate_hz = int(self._voice.config.sample_rate)
         except Exception as error:
-            raise TTSError(f"Failed to initialize TTS engine: {error}") from error
+            raise TTSError(f"Failed to initialize Piper TTS engine: {error}") from error
 
-    def _ensure_model_files(self) -> tuple[str, str]:
-        model_path = self._config.model_path
-        config_path = self._config.config_path
+    def _ensure_model_files(self) -> Path:
+        model_dir = Path(self._config.model_path).expanduser()
+        model_file = model_dir / self._config.hf_filename
+        config_file = model_dir / f"{self._config.hf_filename}.json"
 
-        if os.path.exists(model_path) and os.path.exists(config_path):
-            return model_path, config_path
+        try:
+            model_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise TTSError(
+                f"Failed to create TTS model directory {model_dir}: {error}"
+            ) from error
 
-        repo_id = os.getenv("TTS_HF_REPO_ID", "").strip()
-        local_dir = os.getenv("TTS_HF_LOCAL_DIR", "").strip()
-        if not local_dir:
-            local_dir = os.path.dirname(model_path)
+        if model_file.is_file() and config_file.is_file():
+            return model_file
 
-        resolved_model_path = os.path.join(local_dir, "model_file.pth")
-        resolved_config_path = os.path.join(local_dir, "config.json")
-        if os.path.exists(resolved_model_path) and os.path.exists(resolved_config_path):
-            return resolved_model_path, resolved_config_path
+        missing_assets: list[str] = []
+        if not model_file.is_file():
+            missing_assets.append(model_file.name)
+        if not config_file.is_file():
+            missing_assets.append(config_file.name)
 
+        repo_id = self._config.hf_repo_id.strip()
         if not repo_id:
-            raise ValueError(
-                "TTS is missing model files. Provide valid tts.model_path/tts.config_path, "
-                "or set TTS_HF_LOCAL_DIR with model_file.pth/config.json, "
-                "or set TTS_HF_REPO_ID to auto-download."
+            raise TTSError(
+                "Piper model assets are missing: "
+                f"{', '.join(missing_assets)}. "
+                "Provide the files in tts.model_path or set tts.hf_repo_id for auto-download."
             )
 
         self._logger.info(
-            "TTS model files not found locally, downloading from %s into %s",
+            "Piper model assets not found locally (%s), downloading from %s into %s",
+            ", ".join(missing_assets),
             repo_id,
-            local_dir,
+            model_dir,
         )
-        try:
-            snapshot_download(
-                repo_id=repo_id,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False,
+
+        self._download_and_install_file(
+            repo_id=repo_id,
+            filename=self._config.hf_filename,
+            target_path=model_file,
+        )
+        self._download_and_install_file(
+            repo_id=repo_id,
+            filename=f"{self._config.hf_filename}.json",
+            target_path=config_file,
+        )
+
+        if not model_file.is_file() or not config_file.is_file():
+            raise TTSError(
+                "Downloaded Piper assets are incomplete. "
+                f"Expected {model_file.name} and {config_file.name} in {model_dir}."
             )
+
+        return model_file
+
+    def _download_and_install_file(
+        self,
+        *,
+        repo_id: str,
+        filename: str,
+        target_path: Path,
+    ) -> None:
+        try:
+            downloaded_path = Path(
+                hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=self._config.hf_revision,
+                    resume_download=True,
+                )
+            )
+        except RepositoryNotFoundError as error:
+            raise TTSError(
+                f"Piper Hugging Face repository not found: {repo_id}"
+            ) from error
+        except HfHubHTTPError as error:
+            if "404" in str(error):
+                raise TTSError(
+                    f"Piper asset not found in {repo_id}: {filename}"
+                ) from error
+            raise TTSError(
+                f"HTTP error downloading Piper asset {filename} from {repo_id}: {error}"
+            ) from error
         except Exception as error:
             raise TTSError(
-                f"Failed to download TTS model from Hugging Face: {error}"
+                f"Failed to download Piper asset {filename} from {repo_id}: {error}"
             ) from error
 
-        if not os.path.exists(resolved_model_path) or not os.path.exists(
-            resolved_config_path
-        ):
-            raise TTSError(
-                "Downloaded TTS assets are incomplete. "
-                "Expected model_file.pth and config.json in local model directory."
-            )
+        if not downloaded_path.is_file():
+            raise TTSError(f"Downloaded Piper asset is not a file: {downloaded_path}")
 
-        return resolved_model_path, resolved_config_path
+        self._install_file(downloaded_path, target_path)
+
+    @staticmethod
+    def _install_file(source_path: Path, target_path: Path) -> None:
+        temp_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+
+            try:
+                temp_path.hardlink_to(source_path)
+            except (OSError, NotImplementedError):
+                shutil.copy2(source_path, temp_path)
+
+            if target_path.exists():
+                target_path.unlink()
+            temp_path.rename(target_path)
+        except OSError as error:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+            raise TTSError(
+                f"Failed to install Piper asset {target_path.name}: {error}"
+            ) from error
 
     def synthesize(self, text: str) -> tuple[np.ndarray, int]:
         if not text.strip():
             raise TTSError("Text to synthesize cannot be empty")
 
         try:
-            wav = np.asarray(self._tts.tts(text), dtype=np.float32)
-            sample_rate_hz = self._tts.synthesizer.output_sample_rate
-            return wav, sample_rate_hz
+            audio_chunks: list[bytes] = []
+            for chunk in self._voice.synthesize(text):
+                audio_chunks.append(self._extract_chunk_bytes(chunk))
+
+            if not audio_chunks:
+                raise TTSError("Piper synthesis produced an empty audio stream")
+
+            pcm_bytes = b"".join(audio_chunks)
+            pcm_int16 = np.frombuffer(pcm_bytes, dtype=np.int16)
+            if pcm_int16.size == 0:
+                raise TTSError("Piper synthesis produced an empty audio buffer")
+
+            wav = pcm_int16.astype(np.float32) / 32768.0
+            return wav, self._sample_rate_hz
+        except TTSError:
+            raise
         except Exception as error:
             raise TTSError(f"TTS synthesis failed: {error}") from error
+
+    @staticmethod
+    def _extract_chunk_bytes(chunk: Any) -> bytes:
+        if hasattr(chunk, "audio_int16_bytes"):
+            raw_audio = chunk.audio_int16_bytes
+        elif hasattr(chunk, "audio_data"):
+            raw_audio = chunk.audio_data
+        else:
+            raw_audio = chunk
+
+        if isinstance(raw_audio, np.ndarray):
+            if raw_audio.dtype != np.int16:
+                raw_audio = raw_audio.astype(np.int16, copy=False)
+            return raw_audio.tobytes()
+        if isinstance(raw_audio, (bytes, bytearray)):
+            return bytes(raw_audio)
+        if isinstance(raw_audio, memoryview):
+            return raw_audio.tobytes()
+        if isinstance(raw_audio, (list, tuple)):
+            return np.asarray(raw_audio, dtype=np.int16).tobytes()
+
+        try:
+            return bytes(raw_audio)
+        except Exception as error:
+            raise TTSError(
+                f"Unsupported Piper chunk audio type: {type(raw_audio).__name__}"
+            ) from error
+
+
+# Backward-compatible alias for imports that still refer to CoquiTTSEngine.
+CoquiTTSEngine = PiperTTSEngine
