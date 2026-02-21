@@ -75,14 +75,15 @@ class GoogleCalendar:
         if time_min is None:
             time_min = dt.datetime.now(tz=dt.timezone.utc)
         elif time_min.tzinfo is None:
-            time_min = time_min.replace(tzinfo=dt.timezone.utc)
+            time_min = time_min.replace(tzinfo=dt.datetime.now().astimezone().tzinfo)
+        time_min_utc = time_min.astimezone(dt.timezone.utc)
 
         try:
             result = (
                 self._api.events()
                 .list(
                     calendarId=self._calendar_id,
-                    timeMin=time_min.isoformat().replace("+00:00", "Z"),
+                    timeMin=time_min_utc.isoformat().replace("+00:00", "Z"),
                     maxResults=max_results,
                     singleEvents=True,
                     orderBy="startTime",
@@ -105,17 +106,23 @@ class GoogleCalendar:
         *,
         description: Optional[str] = None,
         location: Optional[str] = None,
-        timezone: str = "UTC",
+        timezone: Optional[str] = None,
     ) -> str:
         self._ensure_write_enabled()
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Event start and end must include timezone information.")
         if end <= start:
             raise ValueError("Event end must be after start.")
 
+        timezone_name = timezone or self._timezone_name(start)
         body: Dict[str, Any] = {
             "summary": summary,
-            "start": {"dateTime": start.isoformat(), "timeZone": timezone},
-            "end": {"dateTime": end.isoformat(), "timeZone": timezone},
+            "start": {"dateTime": start.isoformat()},
+            "end": {"dateTime": end.isoformat()},
         }
+        if timezone_name:
+            body["start"]["timeZone"] = timezone_name
+            body["end"]["timeZone"] = timezone_name
         if description:
             body["description"] = description
         if location:
@@ -160,7 +167,7 @@ class GoogleCalendar:
         end: Optional[dt.datetime] = None,
         description: Optional[str] = None,
         location: Optional[str] = None,
-        timezone: str = "UTC",
+        timezone: Optional[str] = None,
     ) -> Dict[str, Any]:
         self._ensure_write_enabled()
         if not event_id.strip():
@@ -184,9 +191,19 @@ class GoogleCalendar:
         if location is not None:
             event["location"] = location
         if start is not None:
-            event["start"] = {"dateTime": start.isoformat(), "timeZone": timezone}
+            if start.tzinfo is None:
+                raise ValueError("Updated event start must include timezone information.")
+            event["start"] = {"dateTime": start.isoformat()}
+            timezone_name = timezone or self._timezone_name(start)
+            if timezone_name:
+                event["start"]["timeZone"] = timezone_name
         if end is not None:
-            event["end"] = {"dateTime": end.isoformat(), "timeZone": timezone}
+            if end.tzinfo is None:
+                raise ValueError("Updated event end must include timezone information.")
+            event["end"] = {"dateTime": end.isoformat()}
+            timezone_name = timezone or self._timezone_name(end)
+            if timezone_name:
+                event["end"]["timeZone"] = timezone_name
 
         try:
             return (
@@ -220,3 +237,19 @@ class GoogleCalendar:
             raise OracleConfigurationError(
                 "GoogleCalendar was initialized in read-only mode."
             )
+
+    @staticmethod
+    def _timezone_name(value: dt.datetime) -> Optional[str]:
+        tzinfo = value.tzinfo
+        if tzinfo is None:
+            return None
+
+        zone_key = getattr(tzinfo, "key", None)
+        if isinstance(zone_key, str) and zone_key:
+            return zone_key
+
+        zone_name = value.tzname()
+        if isinstance(zone_name, str) and "/" in zone_name:
+            return zone_name
+
+        return None

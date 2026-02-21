@@ -99,6 +99,10 @@ function isPomodoroFocusPhase(phase) {
     return phase === "running" || phase === "paused";
 }
 
+function isTimerFocusPhase(phase) {
+    return phase === "running" || phase === "paused";
+}
+
 function parseEventTimestampMs(payload) {
     if (typeof payload?.timestamp === "string") {
         const parsed = Date.parse(payload.timestamp);
@@ -127,34 +131,48 @@ function currentTimerRemaining() {
     return Math.max(0, timerState.anchorRemainingSeconds - elapsedSeconds);
 }
 
+function effectivePomodoroPhase() {
+    const remainingSeconds = currentPomodoroRemaining();
+    if (pomodoroState.phase === "running" && remainingSeconds === 0) {
+        return "completed";
+    }
+    return pomodoroState.phase;
+}
+
+function effectiveTimerPhase() {
+    const remainingSeconds = currentTimerRemaining();
+    if (timerState.phase === "running" && remainingSeconds === 0) {
+        return "completed";
+    }
+    return timerState.phase;
+}
+
+function renderSessionLayout() {
+    const pomodoroActive = isPomodoroFocusPhase(effectivePomodoroPhase());
+    const timerActive = !pomodoroActive && isTimerFocusPhase(effectiveTimerPhase());
+
+    pomodoroPanel.classList.toggle("active", pomodoroActive);
+    timerPanel.classList.toggle("active", timerActive);
+    document.body.classList.toggle("pomodoro-focus", pomodoroActive);
+}
+
 function renderTimer() {
     const remainingSeconds = currentTimerRemaining();
-    const effectivePhase =
-        timerState.phase === "running" && remainingSeconds === 0
-            ? "completed"
-            : timerState.phase;
+    const phase = effectiveTimerPhase();
 
     timerRemaining.textContent = formatDuration(remainingSeconds);
-    timerPhase.textContent = timerPhaseLabels[effectivePhase] || effectivePhase.toUpperCase();
-
-    const isVisible = effectivePhase === "running" || effectivePhase === "paused";
-    timerPanel.classList.toggle("active", isVisible);
+    timerPhase.textContent = timerPhaseLabels[phase] || phase.toUpperCase();
+    renderSessionLayout();
 }
 
 function renderPomodoro() {
     const remainingSeconds = currentPomodoroRemaining();
-    const effectivePhase =
-        pomodoroState.phase === "running" && remainingSeconds === 0
-            ? "completed"
-            : pomodoroState.phase;
+    const phase = effectivePomodoroPhase();
 
     pomodoroSession.textContent = (pomodoroState.session || "FOCUS SESSION").toUpperCase();
     pomodoroTimer.textContent = formatDuration(remainingSeconds);
-    pomodoroPhase.textContent = pomodoroPhaseLabels[effectivePhase] || effectivePhase.toUpperCase();
-
-    const isActiveSession = isPomodoroFocusPhase(effectivePhase);
-    pomodoroPanel.classList.toggle("active", isActiveSession);
-    document.body.classList.toggle("pomodoro-focus", isActiveSession);
+    pomodoroPhase.textContent = pomodoroPhaseLabels[phase] || phase.toUpperCase();
+    renderSessionLayout();
 }
 
 function applyPomodoroUpdate(payload) {

@@ -4,6 +4,7 @@ import sys
 import time
 import datetime as dt
 import re
+import concurrent.futures
 from queue import Empty, Queue
 from typing import Any, Optional
 
@@ -108,6 +109,8 @@ CALENDAR_TOOLS: set[str] = {
     "add_calendar_event",
 }
 
+ACTIVE_SESSION_PHASES: set[str] = {"running", "paused"}
+
 
 def _format_duration(seconds: int) -> str:
     minutes, remainder = divmod(max(0, int(seconds)), 60)
@@ -116,7 +119,9 @@ def _format_duration(seconds: int) -> str:
 
 def _timer_status_message(snapshot: PomodoroSnapshot) -> str:
     if snapshot.phase == "running":
-        return f"Timer laeuft ({_format_duration(snapshot.remaining_seconds)} verbleibend)"
+        return (
+            f"Timer laeuft ({_format_duration(snapshot.remaining_seconds)} verbleibend)"
+        )
     if snapshot.phase == "paused":
         return f"Timer pausiert ({_format_duration(snapshot.remaining_seconds)} verbleibend)"
     if snapshot.phase == "completed":
@@ -249,8 +254,7 @@ def main() -> int:
                 calendar_service_account_file=secret_config.oracle_google_service_account_file,
             )
             oracle_service = OracleContextService(
-                config=oracle_config,
-                logger=logging.getLogger("oracle")
+                config=oracle_config, logger=logging.getLogger("oracle")
             )
         except Exception as error:
             logger.warning("Oracle context disabled due to init error: %s", error)
@@ -336,6 +340,8 @@ def main() -> int:
         return f"Pomodoro aktualisiert: {topic}."
 
     def _pomodoro_rejection_text(action: str, reason: str) -> str:
+        if reason == "timer_active":
+            return "Es laeuft bereits ein Timer. Bitte stoppe den Timer zuerst."
         if reason == "not_running" and action == "pause":
             return "Die Pomodoro Sitzung laeuft gerade nicht."
         if reason == "not_paused" and action == "continue":
@@ -360,6 +366,8 @@ def main() -> int:
         return "Timer aktualisiert."
 
     def _timer_rejection_text(action: str, reason: str) -> str:
+        if reason == "pomodoro_active":
+            return "Es laeuft bereits eine Pomodoro Sitzung. Bitte stoppe sie zuerst."
         if reason == "not_running" and action == "pause":
             return "Der Timer laeuft gerade nicht."
         if reason == "not_paused" and action == "continue":
@@ -419,6 +427,37 @@ def main() -> int:
             payload["message"] = message
         publish_ui("timer", **payload)
 
+    def _is_session_active(snapshot: PomodoroSnapshot) -> bool:
+        return snapshot.phase in ACTIVE_SESSION_PHASES
+
+    def _stop_timer_for_pomodoro_switch() -> None:
+        timer_snapshot = countdown_timer.snapshot()
+        if not _is_session_active(timer_snapshot):
+            return
+
+        result = countdown_timer.apply("abort", session="Timer")
+        publish_timer_update(
+            result.snapshot,
+            action="abort",
+            accepted=result.accepted,
+            reason="superseded_by_pomodoro",
+            message="Timer beendet, Pomodoro startet jetzt.",
+        )
+
+    def _stop_pomodoro_for_timer_switch() -> None:
+        pomodoro_snapshot = pomodoro_timer.snapshot()
+        if not _is_session_active(pomodoro_snapshot):
+            return
+
+        result = pomodoro_timer.apply("abort", session=pomodoro_snapshot.session)
+        publish_pomodoro_update(
+            result.snapshot,
+            action="abort",
+            accepted=result.accepted,
+            reason="superseded_by_timer",
+            motivation="Pomodoro Sitzung beendet, Timer startet jetzt.",
+        )
+
     def _parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
         if isinstance(value, (int, float)) and int(value) > 0:
             return int(value) * 60
@@ -457,10 +496,14 @@ def main() -> int:
             return None
 
         raw = raw.replace(" ", "T")
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
         try:
             parsed = dt.datetime.fromisoformat(raw)
         except ValueError:
-            de_match = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})T(\d{1,2}):(\d{2})$", raw)
+            de_match = re.match(
+                r"^(\d{1,2})\.(\d{1,2})\.(\d{4})T(\d{1,2}):(\d{2})$", raw
+            )
             if not de_match:
                 return None
             day, month, year, hour, minute = de_match.groups()
@@ -473,7 +516,8 @@ def main() -> int:
             )
 
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=dt.datetime.now().astimezone().tzinfo)
+            local_tz = dt.datetime.now().astimezone().tzinfo or dt.timezone.utc
+            return parsed.replace(tzinfo=local_tz)
         return parsed
 
     def _calendar_window_end(time_range: str) -> dt.datetime:
@@ -500,7 +544,9 @@ def main() -> int:
 
         try:
             if tool_name == "show_upcoming_events":
-                time_range = str(arguments.get("time_range", "heute")).strip() or "heute"
+                time_range = (
+                    str(arguments.get("time_range", "heute")).strip() or "heute"
+                )
                 now = dt.datetime.now().astimezone()
                 window_end = _calendar_window_end(time_range)
                 events = oracle_service.list_upcoming_events(
@@ -565,6 +611,22 @@ def main() -> int:
         assistant_text: str,
     ) -> str:
         action = POMODORO_TOOL_TO_ACTION[tool_name]
+        timer_snapshot = countdown_timer.snapshot()
+        if _is_session_active(timer_snapshot):
+            if action in {"start", "reset"}:
+                _stop_timer_for_pomodoro_switch()
+            else:
+                response_text = _pomodoro_rejection_text(action, "timer_active")
+                publish_pomodoro_update(
+                    pomodoro_timer.snapshot(),
+                    action=action,
+                    accepted=False,
+                    reason="timer_active",
+                    tool_name=tool_name,
+                    motivation=response_text,
+                )
+                return response_text
+
         focus_topic_raw = arguments.get("focus_topic")
         focus_topic = (
             str(focus_topic_raw).strip()
@@ -595,6 +657,19 @@ def main() -> int:
         assistant_text: str,
     ) -> str:
         action = TIMER_TOOL_TO_ACTION[tool_name]
+        pomodoro_snapshot = pomodoro_timer.snapshot()
+        if _is_session_active(pomodoro_snapshot):
+            response_text = _timer_rejection_text(action, "pomodoro_active")
+            publish_timer_update(
+                countdown_timer.snapshot(),
+                action=action,
+                accepted=False,
+                reason="pomodoro_active",
+                tool_name=tool_name,
+                message=response_text,
+            )
+            return response_text
+
         if action == "start":
             duration_seconds = _parse_duration_seconds(
                 arguments.get("duration"),
@@ -606,6 +681,7 @@ def main() -> int:
                 duration_seconds=duration_seconds,
             )
         else:
+            logger.info("----------------------PAUSE- --------------")
             result = countdown_timer.apply(action, session="Timer")
 
         if result.accepted:
@@ -632,6 +708,10 @@ def main() -> int:
         raw_arguments = tool_call.get("arguments")
         arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
 
+        pomodoro_snapshot = pomodoro_timer.snapshot()
+        if _is_session_active(pomodoro_snapshot):
+            raw_name = raw_name.replace("_timer", "_pomodoro_session")
+
         if raw_name in POMODORO_TOOL_TO_ACTION:
             return handle_pomodoro_tool_call(raw_name, arguments, assistant_text)
         if raw_name in TIMER_TOOL_TO_ACTION:
@@ -641,6 +721,80 @@ def main() -> int:
 
         logger.warning("Unsupported tool call: %s", raw_name)
         return assistant_text
+
+    def process_utterance(utterance) -> None:
+        print("  ⏳ Transcribing...\n", end="", flush=True)
+        try:
+            result = stt.transcribe(utterance)
+            if not result.text:
+                print("\r  ⚠️  No speech detected\n")
+                publish_ui_state("idle", message="No speech detected")
+                return
+
+            confidence_str = (
+                f" (confidence: {result.confidence:.0%})" if result.confidence else ""
+            )
+            print(f'\r  💬 "{result.text}"{confidence_str}\n')
+            publish_ui(
+                "transcript",
+                state="transcribing",
+                text=result.text,
+                language=result.language,
+                confidence=result.confidence,
+            )
+
+            if not assistant_llm:
+                publish_idle_state()
+                return
+
+            publish_ui_state("thinking", message="Generating reply")
+            env_context = build_llm_environment_context()
+            llm_response = assistant_llm.run(
+                result.text,
+                env=env_context,
+            )
+            assistant_text = llm_response["assistant_text"].strip()
+            tool_call = llm_response.get("tool_call")
+            if isinstance(tool_call, dict):
+                assistant_text = handle_tool_call(
+                    tool_call,
+                    assistant_text,
+                ).strip()
+
+            if assistant_text:
+                print(f'  🤖 "{assistant_text}"\n')
+                publish_ui(
+                    "assistant_reply",
+                    state="replying",
+                    text=assistant_text,
+                )
+            if speech_service and assistant_text:
+                speech_service.speak(assistant_text)
+            publish_idle_state()
+        except TTSError as error:
+            logger.error(f"TTS playback failed: {error}")
+            publish_ui(
+                "error",
+                state="error",
+                message=f"TTS playback failed: {error}",
+            )
+            publish_idle_state()
+        except STTError as error:
+            logger.error(f"Transcription failed: {error}")
+            publish_ui(
+                "error",
+                state="error",
+                message=f"Transcription failed: {error}",
+            )
+            publish_idle_state()
+        except Exception as error:
+            logger.error(f"LLM processing failed: {error}")
+            publish_ui(
+                "error",
+                state="error",
+                message=f"LLM processing failed: {error}",
+            )
+            publish_idle_state()
 
     def handle_pomodoro_tick(tick: PomodoroTick) -> None:
         if tick.completed:
@@ -713,6 +867,11 @@ def main() -> int:
     publisher = QueueEventPublisher(event_queue)
     service: Optional[WakeWordService] = None
     wake_word_logger = logging.getLogger("wake_word")
+    utterance_executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="utterance",
+    )
+    pending_utterance: Optional[concurrent.futures.Future[None]] = None
 
     try:
         service = WakeWordService(
@@ -742,6 +901,20 @@ def main() -> int:
 
         # Main event loop
         while True:
+            if pending_utterance is not None and pending_utterance.done():
+                try:
+                    pending_utterance.result()
+                except Exception as error:
+                    logger.error("Utterance worker failed: %s", error, exc_info=True)
+                    publish_ui(
+                        "error",
+                        state="error",
+                        message=f"Utterance worker failed: {error}",
+                    )
+                    publish_idle_state()
+                finally:
+                    pending_utterance = None
+
             pomodoro_tick = pomodoro_timer.poll()
             if pomodoro_tick is not None:
                 handle_pomodoro_tick(pomodoro_tick)
@@ -773,85 +946,32 @@ def main() -> int:
                     f"[{utterance.created_at.isoformat()}] ✓ UtteranceCapturedEvent: "
                     f"{utterance.duration_seconds:.2f}s, {len(utterance.audio_bytes):,} bytes\n"
                 )
+                if pending_utterance is not None and not pending_utterance.done():
+                    logger.warning(
+                        "Skipping utterance while previous request is still processing."
+                    )
+                    publish_ui_state(
+                        "thinking", message="Previous request still processing"
+                    )
+                    continue
+
                 publish_ui_state(
                     "transcribing",
                     message="Transcribing utterance",
                     duration_seconds=round(utterance.duration_seconds, 2),
                     audio_bytes=len(utterance.audio_bytes),
                 )
-
-                # Transcribe the utterance
-                print("  ⏳ Transcribing...\n", end="", flush=True)
                 try:
-                    result = stt.transcribe(utterance)
-                    if result.text:
-                        confidence_str = (
-                            f" (confidence: {result.confidence:.0%})"
-                            if result.confidence
-                            else ""
-                        )
-                        print(f'\r  💬 "{result.text}"{confidence_str}\n')
-                        publish_ui(
-                            "transcript",
-                            state="transcribing",
-                            text=result.text,
-                            language=result.language,
-                            confidence=result.confidence,
-                        )
-
-                        if assistant_llm:
-                            publish_ui_state("thinking", message="Generating reply")
-                            try:
-                                env_context = build_llm_environment_context()
-                                llm_response = assistant_llm.run(
-                                    result.text,
-                                    env=env_context,
-                                )
-                                assistant_text = llm_response["assistant_text"].strip()
-                                tool_call = llm_response.get("tool_call")
-                                if isinstance(tool_call, dict):
-                                    assistant_text = handle_tool_call(
-                                        tool_call,
-                                        assistant_text,
-                                    ).strip()
-
-                                if assistant_text:
-                                    print(f'  🤖 "{assistant_text}"\n')
-                                    publish_ui(
-                                        "assistant_reply",
-                                        state="replying",
-                                        text=assistant_text,
-                                    )
-                                if speech_service and assistant_text:
-                                    speech_service.speak(assistant_text)
-                                publish_idle_state()
-                            except TTSError as error:
-                                logger.error(f"TTS playback failed: {error}")
-                                publish_ui(
-                                    "error",
-                                    state="error",
-                                    message=f"TTS playback failed: {error}",
-                                )
-                                publish_idle_state()
-                            except Exception as error:
-                                logger.error(f"LLM processing failed: {error}")
-                                publish_ui(
-                                    "error",
-                                    state="error",
-                                    message=f"LLM processing failed: {error}",
-                                )
-                                publish_idle_state()
-                        else:
-                            publish_idle_state()
-                    else:
-                        print("\r  ⚠️  No speech detected\n")
-                        publish_ui_state("idle", message="No speech detected")
-                except STTError as error:
-                    logger.error(f"Transcription failed: {error}")
+                    pending_utterance = utterance_executor.submit(
+                        process_utterance,
+                        utterance,
+                    )
+                except Exception as error:
+                    logger.error("Failed to submit utterance task: %s", error)
                     publish_ui(
                         "error",
                         state="error",
-                        message=f"Transcription failed: {error}",
+                        message=f"Failed to submit utterance task: {error}",
                     )
                     publish_idle_state()
 
@@ -875,6 +995,8 @@ def main() -> int:
         return 1
 
     finally:
+        logger.info("Stopping utterance executor...")
+        utterance_executor.shutdown(wait=False, cancel_futures=True)
         if service:
             logger.info("Stopping service...")
             try:
