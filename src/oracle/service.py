@@ -3,88 +3,51 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
-from .calendar import GoogleCalendar
 from .config import OracleConfig
-from .sensor import ENS160Sensor, TEMT6000Sensor
+from .contracts import OracleProviders
+from .providers import build_oracle_providers
 
 
 class OracleContextService:
     """Collects environment context from optional oracle providers."""
 
-    def __init__(self, config: OracleConfig, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        config: OracleConfig,
+        logger: Optional[logging.Logger] = None,
+        *,
+        providers: Optional[OracleProviders] = None,
+        monotonic_fn: Optional[Callable[[], float]] = None,
+        now_fn: Optional[Callable[[], datetime]] = None,
+    ):
         self._config = config
         self._logger = logger or logging.getLogger("oracle")
-        self._ens160: Optional[ENS160Sensor] = None
-        self._temt6000: Optional[TEMT6000Sensor] = None
-        self._calendar: Optional[GoogleCalendar] = None
+        self._monotonic = monotonic_fn or time.monotonic
+        self._now = now_fn or (lambda: datetime.now().astimezone())
 
         self._sensor_cache: Dict[str, Any] = {}
         self._sensor_cache_at: float = 0.0
         self._calendar_cache: Optional[list[dict[str, Any]]] = None
         self._calendar_cache_at: float = 0.0
 
-        self._initialize_providers()
+        provider_bundle = providers or build_oracle_providers(
+            self._config,
+            logger=self._logger,
+        )
+        self._ens160 = provider_bundle.ens160
+        self._temt6000 = provider_bundle.temt6000
+        self._calendar = provider_bundle.calendar
 
     @property
     def is_enabled(self) -> bool:
         return self._config.enabled
 
-    def _initialize_providers(self) -> None:
-        if not self._config.enabled:
-            self._logger.info("Oracle integrations disabled (ORACLE_ENABLED=false)")
-            return
-
-        if self._config.ens160_enabled:
-            try:
-                self._ens160 = ENS160Sensor(
-                    temperature_compensation_c=self._config.ens160_temperature_compensation_c,
-                    humidity_compensation_pct=self._config.ens160_humidity_compensation_pct,
-                    logger=self._logger.getChild("ens160"),
-                )
-                self._logger.info("ENS160 sensor enabled")
-            except Exception as error:
-                self._logger.warning("ENS160 unavailable: %s", error)
-
-        if self._config.temt6000_enabled:
-            try:
-                self._temt6000 = TEMT6000Sensor(
-                    channel=self._config.temt6000_channel,
-                    gain=self._config.temt6000_gain,
-                    adc_address=self._config.temt6000_adc_address,
-                    busnum=self._config.temt6000_busnum,
-                    logger=self._logger.getChild("temt6000"),
-                )
-                self._logger.info("TEMT6000 sensor enabled")
-            except Exception as error:
-                self._logger.warning("TEMT6000 unavailable: %s", error)
-
-        if self._config.calendar_enabled:
-            if (
-                not self._config.calendar_id
-                or not self._config.calendar_service_account_file
-            ):
-                self._logger.warning(
-                    "Calendar integration enabled but ORACLE_GOOGLE_CALENDAR_ID or "
-                    "ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE is missing."
-                )
-            else:
-                try:
-                    self._calendar = GoogleCalendar(
-                        calendar_id=self._config.calendar_id,
-                        service_account_file=self._config.calendar_service_account_file,
-                        read_only=False,
-                        logger=self._logger.getChild("calendar"),
-                    )
-                    self._logger.info("Google Calendar integration enabled")
-                except Exception as error:
-                    self._logger.warning("Google Calendar unavailable: %s", error)
-
     def build_environment_payload(self) -> Dict[str, Any]:
         """Return fields usable by llm.EnvironmentContext."""
         payload: Dict[str, Any] = {
-            "now_local": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "now_local": self._now().isoformat(timespec="seconds"),
         }
 
         if not self._config.enabled:
@@ -103,7 +66,7 @@ class OracleContextService:
         return payload
 
     def _read_sensors_with_cache(self) -> Dict[str, Any]:
-        now = time.monotonic()
+        now = self._monotonic()
         if (
             self._sensor_cache
             and (now - self._sensor_cache_at) < self._config.sensor_cache_ttl_seconds
@@ -136,7 +99,7 @@ class OracleContextService:
         if self._calendar is None:
             return None
 
-        now = time.monotonic()
+        now = self._monotonic()
         if (
             self._calendar_cache is not None
             and (now - self._calendar_cache_at)

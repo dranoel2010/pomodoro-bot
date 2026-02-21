@@ -1,13 +1,15 @@
 from typing import Any
 
+from tool_contract import tool_name_gbnf_alternatives
+
 from .config import LLMConfig
 
 
-GBNF_SCHEMA = r"""
+GBNF_SCHEMA_TEMPLATE = r"""
 root ::= "{" ws "\"assistant_text\"" ws ":" ws string ws "," ws "\"tool_call\"" ws ":" ws toolcall ws "}"
 toolcall ::= "null" | toolobj
 toolobj ::= "{" ws "\"name\"" ws ":" ws toolname ws "," ws "\"arguments\"" ws ":" ws argobj ws "}"
-toolname ::= "\"start_timer\"" | "\"stop_timer\"" | "\"pause_timer\"" | "\"continue_timer\"" | "\"reset_timer\"" | "\"start_pomodoro_session\"" | "\"stop_pomodoro_session\"" | "\"pause_pomodoro_session\"" | "\"continue_pomodoro_session\"" | "\"reset_pomodoro_session\"" | "\"show_upcoming_events\"" | "\"add_calendar_event\""
+toolname ::= __TOOLNAME_ALTERNATIVES__
 argobj ::= "{" ws "}" | "{" ws kv-list ws "}"
 kv-list ::= kv-pair | kv-pair ws "," ws kv-list
 kv-pair ::= string ws ":" ws value
@@ -25,6 +27,13 @@ ws ::= ([ \t\n\r])*
 """.strip()
 
 
+def build_gbnf_schema() -> str:
+    return GBNF_SCHEMA_TEMPLATE.replace(
+        "__TOOLNAME_ALTERNATIVES__",
+        tool_name_gbnf_alternatives(),
+    )
+
+
 class LlamaBackend:
     def __init__(self, config: LLMConfig):
         from llama_cpp import Llama, LlamaGrammar
@@ -36,7 +45,7 @@ class LlamaBackend:
             n_batch=config.n_batch,
             verbose=config.verbose,
         )
-        self._grammar = LlamaGrammar.from_string(GBNF_SCHEMA)
+        self._grammar = LlamaGrammar.from_string(build_gbnf_schema())
         self._config = config
 
     def complete(self, messages: list[dict[str, str]], max_tokens: int) -> str:

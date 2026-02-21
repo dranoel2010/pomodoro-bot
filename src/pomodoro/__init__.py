@@ -7,6 +7,7 @@ from .service import (
     PomodoroTick,
     PomodoroTimer,
 )
+from .tool_mapping import remap_timer_tool_for_active_pomodoro
 
 __all__ = [
     "DEFAULT_POMODORO_SECONDS",
@@ -16,4 +17,5 @@ __all__ = [
     "PomodoroSnapshot",
     "PomodoroTick",
     "PomodoroTimer",
+    "remap_timer_tool_for_active_pomodoro",
 ]

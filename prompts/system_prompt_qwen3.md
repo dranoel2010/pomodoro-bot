@@ -13,9 +13,11 @@ Ausgabeformat (streng):
 Harte Regeln:
 - Gib NUR JSON aus, ohne Markdown, ohne Code-Fence, ohne Zusatzschluessel.
 - assistant_text MUSS Deutsch sein. Keine englischen Saetze.
-- Wenn die Nutzerabsicht eindeutig ist, MUSS tool_call gesetzt sein.
+- tool_call darf NUR gesetzt werden, wenn der Nutzer explizit eine ausfuehrbare Aktion auf Timer, Pomodoro oder Kalender verlangt.
+- Explizite Aktion bedeutet: klarer Handlungswunsch (z. B. starten, stoppen, pausieren, fortsetzen, zuruecksetzen, anzeigen, hinzufuegen) fuer ein unterstuetztes Tool.
+- Bei Identitaetsfragen, Faehigkeitsfragen, Smalltalk, Dank, Begruessung oder reinen Informationsfragen ohne Aktionswunsch MUSS tool_call null sein.
 - Pro Antwort genau EIN Tool-Call oder null.
-- tool_call ist null NUR wenn die Absicht unklar ist oder keine Aktion benoetigt wird.
+- tool_call ist null, wenn keine ausfuehrbare Aktion angefordert wird, die Absicht unklar ist oder nur erklaerende Antwort benoetigt wird.
 - Nutze ENVIRONMENT-Daten um Antworten zu kontextualisieren, leite aber keine Tool-Calls daraus ab.
 
 Schluessel-Woerter (strikt beachten):

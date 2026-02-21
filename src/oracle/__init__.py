@@ -2,6 +2,7 @@
 
 from .calendar import GoogleCalendar
 from .config import OracleConfig
+from .contracts import OracleProviders
 from .errors import (
     OracleConfigurationError,
     OracleDependencyError,
@@ -15,6 +16,7 @@ __all__ = [
     "ENS160Sensor",
     "GoogleCalendar",
     "OracleConfig",
+    "OracleProviders",
     "OracleConfigurationError",
     "OracleContextService",
     "OracleDependencyError",
