@@ -52,4 +52,8 @@ mkdir -p dist
 BIN="dist/main"
 [ -f "dist/main.exe" ] && BIN="dist/main.exe"
 
-tar -C dist -czvf dist/archive.tar.gz "$(basename "$BIN")"
+cp config.toml dist/config.toml
+cp .env.dist dist/.env
+cp -rf web_ui dist/web_ui
+
+tar -C dist -czvf dist/archive.tar.gz "$(basename "$BIN")" config.toml .env web_ui
