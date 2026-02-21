@@ -14,7 +14,7 @@ WEBSOCKET_PATH = "/ws"
 
 def _default_index_file() -> Path:
     base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
-    return base_dir / "web_ui" / "index.html"
+    return base_dir / "web_ui" / "jarvis" / "index.html"
 
 
 @dataclass(frozen=True)
@@ -39,9 +39,7 @@ class UIServerConfig:
 
             index_path = Path(self.index_file)
             if not index_path.exists():
-                raise ServerConfigurationError(
-                    f"UI index file not found: {index_path}"
-                )
+                raise ServerConfigurationError(f"UI index file not found: {index_path}")
             if not index_path.is_file():
                 raise ServerConfigurationError(
                     f"UI index path is not a file: {index_path}"
