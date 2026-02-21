@@ -48,7 +48,7 @@ from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_dynamic_libs
 from PyInstaller.utils.hooks import collect_submodules
 
-datas = [('web_ui', 'web_ui')]
+datas = [('web_ui', 'web_ui'), ('prompts', 'prompts')]
 binaries = []
 hiddenimports = []
 datas += collect_data_files('llama_cpp')
@@ -118,6 +118,5 @@ BIN="dist/main"
 
 cp config.toml dist/config.toml
 cp .env.dist dist/.env
-cp -rf web_ui dist/web_ui
 
-tar -C dist -czvf dist/archive.tar.gz "$(basename "$BIN")" config.toml .env web_ui
+tar -C dist -czvf dist/archive.tar.gz "$(basename "$BIN")" config.toml .env
