@@ -1,11 +1,15 @@
+"""UI publishing adapter used by runtime components."""
+
 from __future__ import annotations
 
 from typing import Any, Optional, Protocol
 
 from pomodoro import PomodoroSnapshot
+from contracts.ui_protocol import EVENT_POMODORO, EVENT_TIMER
 
 
 class UIServerLike(Protocol):
+    """Protocol for UI servers used by runtime publishing adapters."""
     def publish(self, event_type: str, **payload: Any) -> None:
         ...
 
@@ -20,6 +24,7 @@ class UIServerLike(Protocol):
 
 
 class RuntimeUIPublisher:
+    """Safe facade that emits runtime updates when a UI server is available."""
     def __init__(self, ui_server: Optional[UIServerLike]):
         self._ui_server = ui_server
 
@@ -62,7 +67,7 @@ class RuntimeUIPublisher:
             payload["tool_name"] = tool_name
         if motivation:
             payload["motivation"] = motivation
-        self.publish("pomodoro", **payload)
+        self.publish(EVENT_POMODORO, **payload)
 
     def publish_timer_update(
         self,
@@ -88,4 +93,4 @@ class RuntimeUIPublisher:
             payload["tool_name"] = tool_name
         if message:
             payload["message"] = message
-        self.publish("timer", **payload)
+        self.publish(EVENT_TIMER, **payload)

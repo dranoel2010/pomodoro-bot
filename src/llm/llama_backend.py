@@ -1,6 +1,8 @@
+"""llama.cpp backend wrapper with constrained JSON grammar output."""
+
 from typing import Any
 
-from tool_contract import tool_name_gbnf_alternatives
+from contracts.tool_contract import tool_name_gbnf_alternatives
 
 from .config import LLMConfig
 
@@ -28,6 +30,7 @@ ws ::= ([ \t\n\r])*
 
 
 def build_gbnf_schema() -> str:
+    """Build the runtime GBNF schema with current canonical tool names."""
     return GBNF_SCHEMA_TEMPLATE.replace(
         "__TOOLNAME_ALTERNATIVES__",
         tool_name_gbnf_alternatives(),
@@ -35,6 +38,7 @@ def build_gbnf_schema() -> str:
 
 
 class LlamaBackend:
+    """Thin wrapper around llama.cpp chat completion with grammar constraints."""
     def __init__(self, config: LLMConfig):
         from llama_cpp import Llama, LlamaGrammar
 

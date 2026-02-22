@@ -1,3 +1,5 @@
+"""Hugging Face download and GGUF validation helpers for local models."""
+
 from __future__ import annotations
 
 import logging

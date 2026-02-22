@@ -1,3 +1,5 @@
+"""Context aggregation service with TTL caching for sensors and calendar."""
+
 from __future__ import annotations
 
 import logging

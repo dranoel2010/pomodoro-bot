@@ -1,3 +1,5 @@
+"""Threaded websocket and static-file server used by the runtime UI."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +15,9 @@ from websockets.asyncio.server import ServerConnection
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
-from .config import UIServerConfig
+from contracts.ui_protocol import EVENT_HELLO, EVENT_STATE_UPDATE, STATE_IDLE
+
+from .config import HEALTHZ_PATH, INDEX_PATH, ROOT_PATH, UIServerConfig
 from .events import StickyEventStore, make_event
 from .static_files import guess_content_type, resolve_static_file
 
@@ -103,7 +107,7 @@ class UIServer:
         event_payload = {"state": state, **payload}
         if message:
             event_payload["message"] = message
-        self.publish("state_update", **event_payload)
+        self.publish(EVENT_STATE_UPDATE, **event_payload)
 
     def publish(self, event_type: str, **payload) -> None:
         if not self.is_running or self._loop is None:
@@ -182,8 +186,8 @@ class UIServer:
         try:
             await websocket.send(
                 make_event(
-                    "hello",
-                    state="idle",
+                    EVENT_HELLO,
+                    state=STATE_IDLE,
                     message="UI websocket connected",
                 )
             )
@@ -207,7 +211,7 @@ class UIServer:
         if path == self._config.websocket_path:
             return None
 
-        if path in ("/", "/index.html"):
+        if path in (ROOT_PATH, INDEX_PATH):
             return self._response(
                 200,
                 "OK",
@@ -215,7 +219,7 @@ class UIServer:
                 "text/html; charset=utf-8",
             )
 
-        if path == "/healthz":
+        if path == HEALTHZ_PATH:
             return self._response(
                 200,
                 "OK",

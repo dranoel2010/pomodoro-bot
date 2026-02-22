@@ -63,7 +63,7 @@ with patch.dict(
         "tts": _build_tts_stub(),
     },
 ):
-    from runtime.utterance import process_utterance
+    from runtime.utterance import UtteranceDependencies, UtteranceProcessor
 
 
 class _TranscriptionResultStub:
@@ -108,26 +108,28 @@ class UtteranceStateFlowTests(unittest.TestCase):
     def test_process_utterance_uses_state_update_for_replying(self) -> None:
         ui = _UIServerStub()
         idle_calls: list[str] = []
-
-        process_utterance(
-            utterance=object(),
-            stt=_STTStub(
-                _TranscriptionResultStub(
-                    text="stop timer",
-                    language="en",
-                    confidence=0.9,
-                )
-            ),
-            assistant_llm=_AssistantLLMStub(
-                {"assistant_text": "Timer stopped.", "tool_call": None}
-            ),
-            speech_service=None,
-            logger=logging.getLogger("test"),
-            ui=ui,
-            build_llm_environment_context=lambda: object(),
-            handle_tool_call=lambda tool_call, assistant_text: assistant_text,
-            publish_idle_state=lambda: idle_calls.append("idle"),
+        processor = UtteranceProcessor(
+            UtteranceDependencies(
+                stt=_STTStub(
+                    _TranscriptionResultStub(
+                        text="stop timer",
+                        language="en",
+                        confidence=0.9,
+                    )
+                ),
+                assistant_llm=_AssistantLLMStub(
+                    {"assistant_text": "Timer stopped.", "tool_call": None}
+                ),
+                speech_service=None,
+                logger=logging.getLogger("test"),
+                ui=ui,
+                build_llm_environment_context=lambda: object(),
+                handle_tool_call=lambda tool_call, assistant_text: assistant_text,
+                publish_idle_state=lambda: idle_calls.append("idle"),
+            )
         )
+
+        processor.process(object())
 
         self.assertIn(("replying", "Delivering reply", {}), ui.states)
 

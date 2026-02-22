@@ -1,9 +1,19 @@
+"""Configuration loading helpers for app settings and environment secrets."""
+
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 from typing import Mapping
+
+from shared.env_keys import (
+    ENV_APP_CONFIG_FILE,
+    ENV_HF_TOKEN,
+    ENV_ORACLE_GOOGLE_CALENDAR_ID,
+    ENV_ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE,
+    ENV_PICO_VOICE_ACCESS_KEY,
+)
 
 from app_config_parser import parse_app_config
 from app_config_schema import (
@@ -26,7 +36,8 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes
 
 
 def resolve_config_path(config_path: str | None = None) -> Path:
-    env_path = os.getenv("APP_CONFIG_FILE")
+    """Resolve the config file path from argument, environment, or default location."""
+    env_path = os.getenv(ENV_APP_CONFIG_FILE)
     raw = config_path or env_path or DEFAULT_CONFIG_FILE
     path = Path(raw).expanduser()
     if path.is_absolute():
@@ -47,6 +58,7 @@ def resolve_config_path(config_path: str | None = None) -> Path:
 
 
 def load_app_config(config_path: str | None = None) -> AppConfig:
+    """Load and parse TOML config into a validated `AppConfig` instance."""
     path = resolve_config_path(config_path)
     if not path.exists():
         raise AppConfigurationError(f"Config file not found: {path}")
@@ -73,17 +85,18 @@ def load_secret_config(
     *,
     environ: Mapping[str, str] | None = None,
 ) -> SecretConfig:
+    """Load required secrets from environment variables into `SecretConfig`."""
     env = environ if environ is not None else os.environ
-    pico = env.get("PICO_VOICE_ACCESS_KEY", "").strip()
+    pico = env.get(ENV_PICO_VOICE_ACCESS_KEY, "").strip()
     if not pico:
         raise AppConfigurationError(
-            "PICO_VOICE_ACCESS_KEY must be set as an environment secret."
+            f"{ENV_PICO_VOICE_ACCESS_KEY} must be set as an environment secret."
         )
 
-    hf_token = env.get("HF_TOKEN", "").strip() or None
-    calendar_id = env.get("ORACLE_GOOGLE_CALENDAR_ID", "").strip() or None
+    hf_token = env.get(ENV_HF_TOKEN, "").strip() or None
+    calendar_id = env.get(ENV_ORACLE_GOOGLE_CALENDAR_ID, "").strip() or None
     service_account = (
-        env.get("ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE", "").strip() or None
+        env.get(ENV_ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE, "").strip() or None
     )
     return SecretConfig(
         pico_voice_access_key=pico,

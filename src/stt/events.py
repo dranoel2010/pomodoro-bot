@@ -1,3 +1,5 @@
+"""Event dataclasses and publisher contracts emitted by wake-word services."""
+
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Queue
@@ -6,6 +8,7 @@ from typing import Optional, Protocol
 
 @dataclass(frozen=True)
 class Utterance:
+    """Captured PCM utterance payload passed from wake-word service to runtime."""
     audio_bytes: bytes
     sample_rate_hz: int
     created_at: datetime
@@ -20,16 +23,19 @@ class Utterance:
 
 @dataclass(frozen=True)
 class WakeWordDetectedEvent:
+    """Event emitted when Porcupine detects the wake word."""
     occurred_at: datetime
 
 
 @dataclass(frozen=True)
 class UtteranceCapturedEvent:
+    """Event emitted when an utterance has been captured after wake-word detection."""
     utterance: Utterance
 
 
 @dataclass(frozen=True)
 class WakeWordErrorEvent:
+    """Event emitted when wake-word capture fails unexpectedly."""
     occurred_at: datetime
     message: str
     exception: Optional[Exception] = None

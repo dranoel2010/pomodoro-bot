@@ -1,10 +1,21 @@
+"""Dispatcher that executes normalized tool calls against runtime services."""
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
+from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
 from pomodoro import PomodoroSnapshot, PomodoroTimer, remap_timer_tool_for_active_pomodoro
-from tool_contract import (
+from pomodoro.constants import (
+    ACTION_ABORT,
+    ACTION_RESET,
+    ACTION_START,
+    REASON_POMODORO_ACTIVE,
+    REASON_SUPERSEDED_BY_POMODORO,
+    REASON_TIMER_ACTIVE,
+)
+from contracts.tool_contract import (
     CALENDAR_TOOL_NAMES,
     POMODORO_TOOL_TO_RUNTIME_ACTION,
     TIMER_TOOL_TO_RUNTIME_ACTION,
@@ -25,6 +36,7 @@ from .ui import RuntimeUIPublisher
 
 
 class RuntimeToolDispatcher:
+    """Routes tool calls to timer, pomodoro, and calendar handlers."""
     def __init__(
         self,
         *,
@@ -90,15 +102,15 @@ class RuntimeToolDispatcher:
         action = POMODORO_TOOL_TO_RUNTIME_ACTION[tool_name]
         timer_snapshot = self._countdown_timer.snapshot()
         if self._is_session_active(timer_snapshot):
-            if action in {"start", "reset"}:
+            if action in {ACTION_START, ACTION_RESET}:
                 self._stop_timer_for_pomodoro_switch()
             else:
-                response_text = pomodoro_rejection_text(action, "timer_active")
+                response_text = pomodoro_rejection_text(action, REASON_TIMER_ACTIVE)
                 self._ui.publish_pomodoro_update(
                     self._pomodoro_timer.snapshot(),
                     action=action,
                     accepted=False,
-                    reason="timer_active",
+                    reason=REASON_TIMER_ACTIVE,
                     tool_name=tool_name,
                     motivation=response_text,
                 )
@@ -137,29 +149,29 @@ class RuntimeToolDispatcher:
         action = TIMER_TOOL_TO_RUNTIME_ACTION[tool_name]
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
         if self._is_session_active(pomodoro_snapshot):
-            response_text = timer_rejection_text(action, "pomodoro_active")
+            response_text = timer_rejection_text(action, REASON_POMODORO_ACTIVE)
             self._ui.publish_timer_update(
                 self._countdown_timer.snapshot(),
                 action=action,
                 accepted=False,
-                reason="pomodoro_active",
+                reason=REASON_POMODORO_ACTIVE,
                 tool_name=tool_name,
                 message=response_text,
             )
             return response_text
 
-        if action == "start":
+        if action == ACTION_START:
             duration_seconds = parse_duration_seconds(
                 arguments.get("duration"),
-                default_seconds=10 * 60,
+                default_seconds=DEFAULT_TIMER_DURATION_SECONDS,
             )
             result = self._countdown_timer.apply(
                 action,
-                session="Timer",
+                session=DEFAULT_TIMER_SESSION_NAME,
                 duration_seconds=duration_seconds,
             )
         else:
-            result = self._countdown_timer.apply(action, session="Timer")
+            result = self._countdown_timer.apply(action, session=DEFAULT_TIMER_SESSION_NAME)
 
         if result.accepted:
             response_text = assistant_text.strip() or default_timer_text(
@@ -186,11 +198,11 @@ class RuntimeToolDispatcher:
         if not self._is_session_active(timer_snapshot):
             return
 
-        result = self._countdown_timer.apply("abort", session="Timer")
+        result = self._countdown_timer.apply(ACTION_ABORT, session=DEFAULT_TIMER_SESSION_NAME)
         self._ui.publish_timer_update(
             result.snapshot,
-            action="abort",
+            action=ACTION_ABORT,
             accepted=result.accepted,
-            reason="superseded_by_pomodoro",
+            reason=REASON_SUPERSEDED_BY_POMODORO,
             message="Timer beendet, Pomodoro startet jetzt.",
         )

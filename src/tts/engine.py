@@ -1,3 +1,5 @@
+"""Piper TTS engine wrapper with model download and synthesis helpers."""
+
 import logging
 import shutil
 from pathlib import Path
@@ -17,6 +19,7 @@ class TTSError(Exception):
 
 
 class PiperTTSEngine:
+    """Loads Piper model assets and synthesizes text into PCM audio."""
     def __init__(
         self,
         config: TTSConfig,

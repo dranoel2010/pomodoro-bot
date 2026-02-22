@@ -1,3 +1,5 @@
+"""High-level speech service that synthesizes and plays assistant replies."""
+
 import logging
 from typing import Optional
 
@@ -6,6 +8,7 @@ from .output import SoundDeviceAudioOutput
 
 
 class SpeechService:
+    """Combines synthesis and playback into a single speak operation."""
     def __init__(
         self,
         engine: PiperTTSEngine,

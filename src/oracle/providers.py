@@ -1,3 +1,5 @@
+"""Factory for building available oracle providers from configuration."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +15,7 @@ def build_oracle_providers(
     *,
     logger: logging.Logger,
 ) -> OracleProviders:
+    """Initialize configured oracle providers and degrade gracefully on failures."""
     if not config.enabled:
         logger.info("Oracle integrations disabled (ORACLE_ENABLED=false)")
         return OracleProviders()

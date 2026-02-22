@@ -1,3 +1,5 @@
+"""Sounddevice-backed audio playback for synthesized speech."""
+
 import logging
 from typing import Optional
 
@@ -8,6 +10,7 @@ from .engine import TTSError
 
 
 class SoundDeviceAudioOutput:
+    """Plays mono PCM arrays through a selected sounddevice output."""
     def __init__(
         self,
         output_device_index: Optional[int] = None,

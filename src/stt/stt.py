@@ -1,3 +1,5 @@
+"""faster-whisper transcription adapters used by runtime utterance handling."""
+
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -8,6 +10,7 @@ from .events import Utterance
 
 @dataclass(frozen=True)
 class TranscriptionResult:
+    """Structured transcription payload returned by STT backends."""
     text: str
     language: str
     confidence: Optional[float] = None

@@ -13,6 +13,7 @@ from stt import WakeWordConfig, ConfigurationError
 
 
 def setup_logging():
+    """Configure console logging for the diagnostic tool."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(message)s",
@@ -20,6 +21,7 @@ def setup_logging():
 
 
 def main():
+    """Run interactive microphone diagnostics for wake-word VAD tuning."""
     setup_logging()
     logger = logging.getLogger(__name__)
 

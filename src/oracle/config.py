@@ -1,9 +1,12 @@
+"""Typed configuration model for optional oracle integrations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class OracleConfig:
+    """Validated oracle runtime configuration assembled from app settings and secrets."""
     enabled: bool
     ens160_enabled: bool
     temt6000_enabled: bool

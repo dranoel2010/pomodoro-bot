@@ -1,3 +1,5 @@
+"""Runtime handlers and parsing helpers for calendar tool calls."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -5,10 +7,17 @@ import logging
 import re
 from typing import Any, Optional
 
+from shared.defaults import (
+    DEFAULT_CALENDAR_EVENT_DURATION_SECONDS,
+    DEFAULT_CALENDAR_TIME_RANGE,
+)
+from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_EVENTS
+
 from .contracts import AppConfigLike, CalendarOracleLike
 
 
 def parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
+    """Parse duration inputs and return a positive value in seconds."""
     if isinstance(value, (int, float)) and int(value) > 0:
         return int(value) * 60
     if isinstance(value, str):
@@ -31,6 +40,7 @@ def parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
 
 
 def parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
+    """Parse ISO or German date-time strings into timezone-aware datetimes."""
     if not isinstance(value, str):
         return None
     raw = value.strip()
@@ -62,6 +72,7 @@ def parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
 
 
 def calendar_window_end(time_range: str) -> dt.datetime:
+    """Resolve the end boundary for relative calendar time-range requests."""
     now = dt.datetime.now().astimezone()
     lowered = time_range.lower()
     if "uebermorgen" in lowered:
@@ -88,12 +99,16 @@ def handle_calendar_tool_call(
     app_config: AppConfigLike,
     logger: logging.Logger,
 ) -> str:
+    """Execute calendar tool calls and return user-facing German responses."""
     if oracle_service is None:
         return "Kalenderfunktion ist derzeit nicht verfuegbar."
 
     try:
-        if tool_name == "show_upcoming_events":
-            time_range = str(arguments.get("time_range", "heute")).strip() or "heute"
+        if tool_name == TOOL_SHOW_UPCOMING_EVENTS:
+            time_range = (
+                str(arguments.get("time_range", DEFAULT_CALENDAR_TIME_RANGE)).strip()
+                or DEFAULT_CALENDAR_TIME_RANGE
+            )
             now = dt.datetime.now().astimezone()
             window_end = calendar_window_end(time_range)
             events = oracle_service.list_upcoming_events(
@@ -123,13 +138,13 @@ def handle_calendar_tool_call(
                 parts.append(f"{summary} um {start_time}")
             return "Anstehende Termine: " + "; ".join(parts) + "."
 
-        if tool_name == "add_calendar_event":
+        if tool_name == TOOL_ADD_CALENDAR_EVENT:
             title = str(arguments.get("title", "")).strip()
             start_time = parse_calendar_datetime(arguments.get("start_time"))
             end_time = parse_calendar_datetime(arguments.get("end_time"))
             duration_seconds = parse_duration_seconds(
                 arguments.get("duration"),
-                default_seconds=30 * 60,
+                default_seconds=DEFAULT_CALENDAR_EVENT_DURATION_SECONDS,
             )
             if start_time is None:
                 return "Ich konnte den Termin nicht anlegen, weil die Startzeit fehlt oder ungueltig ist."
@@ -148,6 +163,6 @@ def handle_calendar_tool_call(
             return f"Termin angelegt: {title}. Ereignis-ID: {event_id}."
     except Exception as error:
         logger.error("Kalenderaktion fehlgeschlagen (%s): %s", tool_name, error)
-        return f"Kalenderaktion fehlgeschlagen: {error}"
+        return "Kalenderaktion fehlgeschlagen. Bitte versuche es spaeter erneut."
 
     return "Kalenderaktion verarbeitet."

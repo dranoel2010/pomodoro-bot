@@ -1,3 +1,5 @@
+"""Energy-based voice activity detector used during utterance capture."""
+
 import logging
 import math
 from typing import Optional

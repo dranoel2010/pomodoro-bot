@@ -1,10 +1,26 @@
+"""Structured response parser with fallback intent inference."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from tool_contract import INTENT_TO_POMODORO_TOOL, INTENT_TO_TIMER_TOOL, TOOL_NAMES
+from shared.defaults import (
+    DEFAULT_CALENDAR_TIME_RANGE,
+    DEFAULT_FOCUS_TOPIC_DE,
+    DEFAULT_TIMER_MINUTES,
+)
+from contracts.tool_contract import (
+    INTENT_TO_POMODORO_TOOL,
+    INTENT_TO_TIMER_TOOL,
+    TOOL_ADD_CALENDAR_EVENT,
+    TOOL_NAMES,
+    TOOL_SHOW_UPCOMING_EVENTS,
+    TOOL_START_POMODORO,
+    TOOL_START_TIMER,
+    TOOLS_WITHOUT_ARGUMENTS,
+)
 
 from .parser_extractors import (
     extract_calendar_title,
@@ -19,6 +35,7 @@ from .parser_extractors import (
 from .parser_messages import fallback_assistant_text, normalize_assistant_text
 from .parser_rules import (
     LEGACY_ACTION_BY_TOOL,
+    LEGACY_TOOL_TIMER_START,
     detect_action,
     has_pomodoro_context,
     has_timer_context,
@@ -27,10 +44,18 @@ from .parser_rules import (
 )
 from .types import StructuredResponse, ToolCall, ToolName
 
+
 class ResponseParser:
+    """Normalize model output and apply compatibility fallbacks.
+
+    Note:
+        Tool-call inference from the user prompt is intentionally enabled as a
+        fail-safe when the model output is invalid or incomplete.
+    """
+
     def __init__(self):
         self._last_focus_topic: Optional[str] = None
-        self._last_time_range: str = "heute"
+        self._last_time_range: str = DEFAULT_CALENDAR_TIME_RANGE
 
     def parse(self, content: str, user_prompt: str) -> StructuredResponse:
         parsed = self._load_json_object(content)
@@ -39,6 +64,8 @@ class ResponseParser:
             if normalized is not None:
                 return normalized
 
+        # Intentional behavior: fallback inference keeps the assistant usable
+        # even when model output violates the strict JSON contract.
         inferred = self._infer_tool_call_from_prompt(user_prompt)
         return {
             "assistant_text": self._fallback_assistant_text(inferred),
@@ -124,7 +151,7 @@ class ResponseParser:
         if action is None:
             return None
 
-        if normalized_name == "timer_start":
+        if normalized_name == LEGACY_TOOL_TIMER_START:
             if "focus_topic" in arguments or "session" in arguments:
                 return INTENT_TO_POMODORO_TOOL[action]
             if "duration" in arguments:
@@ -145,47 +172,40 @@ class ResponseParser:
     def _normalize_arguments_for_tool(
         self, tool_name: str, arguments: dict[str, Any], user_prompt: str
     ) -> Optional[dict[str, Any]]:
-        if tool_name == "start_timer":
+        if tool_name == TOOL_START_TIMER:
             duration = normalize_duration(arguments.get("duration"))
             if duration is None:
-                duration = extract_duration_from_prompt(user_prompt) or "10"
+                duration = extract_duration_from_prompt(user_prompt) or str(
+                    DEFAULT_TIMER_MINUTES
+                )
             return {"duration": duration}
 
-        if tool_name in {
-            "stop_timer",
-            "pause_timer",
-            "continue_timer",
-            "reset_timer",
-            "stop_pomodoro_session",
-            "pause_pomodoro_session",
-            "continue_pomodoro_session",
-            "reset_pomodoro_session",
-        }:
+        if tool_name in TOOLS_WITHOUT_ARGUMENTS:
             return {}
 
-        if tool_name == "start_pomodoro_session":
+        if tool_name == TOOL_START_POMODORO:
             raw_topic = (
                 arguments.get("focus_topic")
                 or arguments.get("session")
                 or extract_focus_topic(user_prompt)
                 or self._last_focus_topic
-                or "Fokus"
+                or DEFAULT_FOCUS_TOPIC_DE
             )
-            topic = sanitize_text(raw_topic, max_len=60) or "Fokus"
+            topic = sanitize_text(raw_topic, max_len=60) or DEFAULT_FOCUS_TOPIC_DE
             self._last_focus_topic = topic
             return {"focus_topic": topic}
 
-        if tool_name == "show_upcoming_events":
+        if tool_name == TOOL_SHOW_UPCOMING_EVENTS:
             time_range = sanitize_time_range(
                 arguments.get("time_range")
                 or extract_time_range(user_prompt)
                 or self._last_time_range
-                or "heute"
+                or DEFAULT_CALENDAR_TIME_RANGE
             )
             self._last_time_range = time_range
             return {"time_range": time_range}
 
-        if tool_name == "add_calendar_event":
+        if tool_name == TOOL_ADD_CALENDAR_EVENT:
             title = sanitize_text(
                 arguments.get("title") or extract_calendar_title(user_prompt),
                 max_len=120,
@@ -218,17 +238,23 @@ class ResponseParser:
         lowered = prompt.lower()
 
         if looks_like_add_calendar(lowered):
-            arguments = self._normalize_arguments_for_tool("add_calendar_event", {}, prompt)
+            arguments = self._normalize_arguments_for_tool(
+                TOOL_ADD_CALENDAR_EVENT,
+                {},
+                prompt,
+            )
             if arguments is not None:
-                return self._tool_call("add_calendar_event", arguments)
+                return self._tool_call(TOOL_ADD_CALENDAR_EVENT, arguments)
             return None
 
         if looks_like_show_events(lowered):
             arguments = self._normalize_arguments_for_tool(
-                "show_upcoming_events", {}, prompt
+                TOOL_SHOW_UPCOMING_EVENTS,
+                {},
+                prompt,
             )
             if arguments is not None:
-                return self._tool_call("show_upcoming_events", arguments)
+                return self._tool_call(TOOL_SHOW_UPCOMING_EVENTS, arguments)
             return None
 
         action = detect_action(prompt)
@@ -248,7 +274,11 @@ class ResponseParser:
 
         if has_timer or duration is not None:
             name = INTENT_TO_TIMER_TOOL[action]
-            seed_args = {"duration": duration} if duration and name == "start_timer" else {}
+            seed_args = (
+                {"duration": duration}
+                if duration and name == TOOL_START_TIMER
+                else {}
+            )
             arguments = self._normalize_arguments_for_tool(name, seed_args, prompt)
             if arguments is None:
                 return None

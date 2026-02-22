@@ -1,3 +1,5 @@
+"""Typed payloads shared across LLM backend, parser, and runtime integration."""
+
 from __future__ import annotations
 
 import json
@@ -5,17 +7,19 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, TypedDict
 
-from tool_contract import TOOL_NAME_ORDER
+from contracts.tool_contract import TOOL_NAME_ORDER
 
 ToolName = Literal[*TOOL_NAME_ORDER]
 
 
 class ToolCall(TypedDict):
+    """Typed structure for a single normalized runtime tool invocation."""
     name: ToolName
     arguments: Dict[str, Any]
 
 
 class StructuredResponse(TypedDict):
+    """Typed schema produced by the parser and consumed by runtime."""
     assistant_text: str
     tool_call: Optional[ToolCall]
 

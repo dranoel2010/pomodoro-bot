@@ -1,3 +1,5 @@
+"""Public exports for the local LLM integration module."""
+
 from .config import LLMConfig
 from .model_store import HFModelSpec, ensure_model_downloaded
 from .service import PomodoroAssistantLLM

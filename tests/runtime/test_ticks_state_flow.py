@@ -30,7 +30,7 @@ def _build_tts_stub():
 
 
 with patch.dict(sys.modules, {"tts": _build_tts_stub()}):
-    from runtime.ticks import handle_pomodoro_tick, handle_timer_tick
+    from runtime.ticks import TickDependencies, TickProcessor
 
 
 class _UIServerStub:
@@ -62,6 +62,14 @@ class TickStateFlowTests(unittest.TestCase):
     def test_timer_completion_publishes_replying_then_idle(self) -> None:
         ui = _UIServerStub()
         idle_calls: list[str] = []
+        processor = TickProcessor(
+            TickDependencies(
+                speech_service=None,
+                logger=logging.getLogger("test"),
+                ui=ui,
+                publish_idle_state=lambda: idle_calls.append("idle"),
+            )
+        )
         tick = PomodoroTick(
             snapshot=PomodoroSnapshot(
                 phase="completed",
@@ -72,13 +80,7 @@ class TickStateFlowTests(unittest.TestCase):
             completed=True,
         )
 
-        handle_timer_tick(
-            tick,
-            speech_service=None,
-            logger=logging.getLogger("test"),
-            ui=ui,
-            publish_idle_state=lambda: idle_calls.append("idle"),
-        )
+        processor.handle_timer_tick(tick)
 
         self.assertIn(("replying", "Timer completed", {}), ui.states)
         assistant_events = [payload for kind, payload in ui.events if kind == "assistant_reply"]
@@ -93,6 +95,14 @@ class TickStateFlowTests(unittest.TestCase):
     def test_pomodoro_completion_publishes_replying_then_idle(self) -> None:
         ui = _UIServerStub()
         idle_calls: list[str] = []
+        processor = TickProcessor(
+            TickDependencies(
+                speech_service=None,
+                logger=logging.getLogger("test"),
+                ui=ui,
+                publish_idle_state=lambda: idle_calls.append("idle"),
+            )
+        )
         tick = PomodoroTick(
             snapshot=PomodoroSnapshot(
                 phase="completed",
@@ -103,13 +113,7 @@ class TickStateFlowTests(unittest.TestCase):
             completed=True,
         )
 
-        handle_pomodoro_tick(
-            tick,
-            speech_service=None,
-            logger=logging.getLogger("test"),
-            ui=ui,
-            publish_idle_state=lambda: idle_calls.append("idle"),
-        )
+        processor.handle_pomodoro_tick(tick)
 
         self.assertIn(("replying", "Pomodoro completed", {}), ui.states)
         assistant_events = [payload for kind, payload in ui.events if kind == "assistant_reply"]

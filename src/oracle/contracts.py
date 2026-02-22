@@ -1,3 +1,5 @@
+"""Provider protocols and container types used by oracle services."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,16 +8,19 @@ from typing import Any, Mapping, Optional, Protocol
 
 
 class AirQualitySensorLike(Protocol):
+    """Protocol for air-quality providers returning normalized readings."""
     def get_readings(self) -> Mapping[str, Any]:
         ...
 
 
 class LightSensorLike(Protocol):
+    """Protocol for light sensors returning normalized readings."""
     def get_readings(self) -> Mapping[str, Any]:
         ...
 
 
 class CalendarClientLike(Protocol):
+    """Protocol for calendar providers used by runtime tool handlers."""
     def get_events(
         self,
         *,
@@ -36,6 +41,7 @@ class CalendarClientLike(Protocol):
 
 @dataclass(frozen=True)
 class OracleProviders:
+    """Container bundling optional provider instances built at startup."""
     ens160: Optional[AirQualitySensorLike] = None
     temt6000: Optional[LightSensorLike] = None
     calendar: Optional[CalendarClientLike] = None

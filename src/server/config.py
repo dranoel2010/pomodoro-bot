@@ -1,3 +1,5 @@
+"""Configuration model for static UI and websocket server runtime."""
+
 from __future__ import annotations
 
 import sys
@@ -10,6 +12,9 @@ class ServerConfigurationError(Exception):
 
 
 WEBSOCKET_PATH = "/ws"
+ROOT_PATH = "/"
+INDEX_PATH = "/index.html"
+HEALTHZ_PATH = "/healthz"
 _UI_INDEX_FILES = {
     "jarvis": Path("web_ui") / "jarvis" / "index.html",
     "miro": Path("web_ui") / "miro" / "index.html",
@@ -27,6 +32,7 @@ def _default_index_file(ui: str) -> Path:
 
 @dataclass(frozen=True)
 class UIServerConfig:
+    """Validated UI server configuration derived from app settings."""
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8765

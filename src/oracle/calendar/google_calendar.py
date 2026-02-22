@@ -1,3 +1,5 @@
+"""Google Calendar client wrapper used by oracle services."""
+
 from __future__ import annotations
 
 import datetime as dt

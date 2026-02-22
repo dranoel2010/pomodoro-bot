@@ -1,3 +1,5 @@
+"""Standalone launcher for the UI server."""
+
 import logging
 import signal
 import sys
@@ -12,6 +14,7 @@ from server import ServerConfigurationError, UIServer, UIServerConfig
 
 
 def main() -> int:
+    """Run the standalone UI server process until interrupted."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

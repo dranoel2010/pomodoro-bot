@@ -1,3 +1,5 @@
+"""TEMT6000 light-sensor adapter backed by an ADS1115 ADC."""
+
 from __future__ import annotations
 
 import logging

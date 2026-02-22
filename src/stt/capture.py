@@ -1,3 +1,5 @@
+"""Utterance capture state machine driven by VAD decisions."""
+
 import logging
 import math  # ✅ Moved to module scope
 import struct

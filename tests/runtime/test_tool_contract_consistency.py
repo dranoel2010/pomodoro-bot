@@ -1,6 +1,6 @@
 import unittest
 
-from tool_contract import (
+from contracts.tool_contract import (
     CALENDAR_TOOL_NAMES,
     INTENT_TO_POMODORO_TOOL,
     INTENT_TO_TIMER_TOOL,

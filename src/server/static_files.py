@@ -1,3 +1,5 @@
+"""Safe static-file resolution and content-type helpers for UI assets."""
+
 from __future__ import annotations
 
 import mimetypes
@@ -6,6 +8,7 @@ from typing import Optional
 
 
 def resolve_static_file(ui_root: Path, request_path: str) -> Optional[Path]:
+    """Resolve a safe static file path within the configured UI root."""
     root = ui_root.resolve()
     if not request_path or request_path == "/":
         return None
@@ -25,6 +28,7 @@ def resolve_static_file(ui_root: Path, request_path: str) -> Optional[Path]:
 
 
 def guess_content_type(path: Path) -> str:
+    """Guess an HTTP content type and append UTF-8 charset for text payloads."""
     mime_type, _ = mimetypes.guess_type(str(path))
     if not mime_type:
         return "application/octet-stream"

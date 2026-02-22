@@ -1,11 +1,16 @@
+"""Regex-based extractors for durations, topics, calendar details, and times."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 import re
 from typing import Any, Callable, Optional
 
+from shared.defaults import DEFAULT_CALENDAR_TIME_RANGE
+
 
 def sanitize_text(value: Any, *, max_len: int) -> str:
+    """Normalize arbitrary text by trimming whitespace and enforcing a length limit."""
     if value is None:
         return ""
     text = str(value).strip()
@@ -14,6 +19,7 @@ def sanitize_text(value: Any, *, max_len: int) -> str:
 
 
 def normalize_duration(value: Any) -> Optional[str]:
+    """Normalize duration-like values into compact minute/second/hour tokens."""
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -49,10 +55,12 @@ def normalize_duration(value: Any) -> Optional[str]:
 
 
 def extract_duration_from_prompt(prompt: str) -> Optional[str]:
+    """Extract a duration token from free-form prompt text."""
     return normalize_duration(prompt)
 
 
 def extract_focus_topic(prompt: str) -> Optional[str]:
+    """Extract a likely pomodoro focus topic from prompt text."""
     quoted = re.search(r"[\"'“”„](.+?)[\"'“”„]", prompt)
     if quoted:
         return quoted.group(1)
@@ -71,13 +79,15 @@ def extract_focus_topic(prompt: str) -> Optional[str]:
 
 
 def sanitize_time_range(value: Any) -> str:
+    """Normalize calendar time-range text to a canonical ASCII form."""
     text = sanitize_text(value, max_len=64).lower()
     if not text:
-        return "heute"
+        return DEFAULT_CALENDAR_TIME_RANGE
     return text.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
 
 
 def extract_time_range(prompt: str) -> Optional[str]:
+    """Extract relative calendar windows such as today or next week."""
     lowered = prompt.lower()
     if "uebermorgen" in lowered or "übermorgen" in lowered:
         return "uebermorgen"
@@ -92,11 +102,12 @@ def extract_time_range(prompt: str) -> Optional[str]:
     if days_match:
         return f"naechste {days_match.group(2)} tage"
     if "heute" in lowered:
-        return "heute"
+        return DEFAULT_CALENDAR_TIME_RANGE
     return None
 
 
 def extract_calendar_title(prompt: str) -> Optional[str]:
+    """Extract a likely calendar event title from prompt text."""
     quoted = re.search(r"(?:titel|title)?\s*[\"'“”„](.+?)[\"'“”„]", prompt, re.I)
     if quoted:
         return quoted.group(1)
@@ -134,6 +145,7 @@ def extract_datetime_literal(
     *,
     now_fn: Optional[Callable[[], datetime]] = None,
 ) -> Optional[str]:
+    """Extract ISO, German, or relative date-time literals from prompt text."""
     iso_match = re.search(
         r"\b(\d{4}-\d{2}-\d{2}[T\s]\d{1,2}:\d{2}(?::\d{2})?)\b",
         prompt,

@@ -1,3 +1,5 @@
+"""Thread-safe in-memory pomodoro/timer state machine."""
+
 from __future__ import annotations
 
 import logging
@@ -7,8 +9,31 @@ import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-
-DEFAULT_POMODORO_SECONDS = 25 * 60
+from .constants import (
+    ACTION_ABORT,
+    ACTION_CONTINUE,
+    ACTION_PAUSE,
+    ACTION_RESET,
+    ACTION_START,
+    ACTIVE_PHASES,
+    DEFAULT_POMODORO_SECONDS,
+    DEFAULT_POMODORO_SESSION_NAME,
+    PHASE_ABORTED,
+    PHASE_COMPLETED,
+    PHASE_IDLE,
+    PHASE_PAUSED,
+    PHASE_RUNNING,
+    REASON_ABORTED,
+    REASON_CONTINUED,
+    REASON_INVALID_STATE,
+    REASON_NOT_ACTIVE,
+    REASON_NOT_PAUSED,
+    REASON_NOT_RUNNING,
+    REASON_PAUSED,
+    REASON_RESET,
+    REASON_STARTED,
+    REASON_UNSUPPORTED_ACTION,
+)
 
 PomodoroPhase = Literal["idle", "running", "paused", "completed", "aborted"]
 PomodoroAction = Literal["start", "pause", "continue", "abort", "reset"]
@@ -16,6 +41,7 @@ PomodoroAction = Literal["start", "pause", "continue", "abort", "reset"]
 
 @dataclass(frozen=True)
 class PomodoroSnapshot:
+    """Immutable timer snapshot exposed to runtime and UI publishers."""
     phase: PomodoroPhase
     session: Optional[str]
     duration_seconds: int
@@ -23,11 +49,12 @@ class PomodoroSnapshot:
 
     @property
     def is_active(self) -> bool:
-        return self.phase in ("running", "paused")
+        return self.phase in ACTIVE_PHASES
 
 
 @dataclass(frozen=True)
 class PomodoroActionResult:
+    """Result envelope returned after applying a timer or pomodoro action."""
     action: PomodoroAction
     accepted: bool
     reason: str
@@ -36,6 +63,7 @@ class PomodoroActionResult:
 
 @dataclass(frozen=True)
 class PomodoroTick:
+    """Tick payload emitted while countdown timers are running."""
     snapshot: PomodoroSnapshot
     completed: bool = False
 
@@ -57,7 +85,7 @@ class PomodoroTimer:
         self._logger = logger or logging.getLogger("pomodoro")
         self._lock = threading.Lock()
 
-        self._phase: PomodoroPhase = "idle"
+        self._phase: PomodoroPhase = PHASE_IDLE
         self._session: Optional[str] = None
         self._started_at_monotonic: Optional[float] = None
         self._paused_at_monotonic: Optional[float] = None
@@ -78,81 +106,81 @@ class PomodoroTimer:
     ) -> PomodoroActionResult:
         with self._lock:
             now = time.monotonic()
-            if action == "start":
+            if action == ACTION_START:
                 self._start_locked(
                     now,
                     session=session,
                     duration_seconds=duration_seconds,
                 )
-                return self._result_locked(action, True, "started", now)
+                return self._result_locked(action, True, REASON_STARTED, now)
 
-            if action == "reset":
-                reset_session = session or self._session or "Focus"
+            if action == ACTION_RESET:
+                reset_session = session or self._session or DEFAULT_POMODORO_SESSION_NAME
                 self._start_locked(
                     now,
                     session=reset_session,
                     duration_seconds=duration_seconds,
                 )
-                return self._result_locked(action, True, "reset", now)
+                return self._result_locked(action, True, REASON_RESET, now)
 
-            if action == "pause":
-                if self._phase != "running":
-                    return self._result_locked(action, False, "not_running", now)
+            if action == ACTION_PAUSE:
+                if self._phase != PHASE_RUNNING:
+                    return self._result_locked(action, False, REASON_NOT_RUNNING, now)
 
                 self._terminal_remaining_seconds = self._running_remaining_locked(now)
                 self._paused_at_monotonic = now
-                self._phase = "paused"
+                self._phase = PHASE_PAUSED
                 self._last_emitted_remaining = self._terminal_remaining_seconds
                 self._logger.info(
                     "Pomodoro paused: session=%s remaining=%ss",
                     self._session,
                     self._terminal_remaining_seconds,
                 )
-                return self._result_locked(action, True, "paused", now)
+                return self._result_locked(action, True, REASON_PAUSED, now)
 
-            if action == "continue":
-                if self._phase != "paused":
-                    return self._result_locked(action, False, "not_paused", now)
+            if action == ACTION_CONTINUE:
+                if self._phase != PHASE_PAUSED:
+                    return self._result_locked(action, False, REASON_NOT_PAUSED, now)
 
                 paused_at = self._paused_at_monotonic
                 if paused_at is None:
-                    return self._result_locked(action, False, "invalid_state", now)
+                    return self._result_locked(action, False, REASON_INVALID_STATE, now)
 
                 self._paused_total_seconds += max(0.0, now - paused_at)
                 self._paused_at_monotonic = None
-                self._phase = "running"
+                self._phase = PHASE_RUNNING
                 self._last_emitted_remaining = None
                 self._logger.info("Pomodoro continued: session=%s", self._session)
-                return self._result_locked(action, True, "continued", now)
+                return self._result_locked(action, True, REASON_CONTINUED, now)
 
-            if action == "abort":
-                if self._phase not in ("running", "paused"):
-                    return self._result_locked(action, False, "not_active", now)
+            if action == ACTION_ABORT:
+                if self._phase not in ACTIVE_PHASES:
+                    return self._result_locked(action, False, REASON_NOT_ACTIVE, now)
 
                 self._terminal_remaining_seconds = self._current_remaining_locked(now)
                 self._paused_at_monotonic = None
-                self._phase = "aborted"
+                self._phase = PHASE_ABORTED
                 self._last_emitted_remaining = self._terminal_remaining_seconds
                 self._logger.info(
                     "Pomodoro aborted: session=%s remaining=%ss",
                     self._session,
                     self._terminal_remaining_seconds,
                 )
-                return self._result_locked(action, True, "aborted", now)
+                return self._result_locked(action, True, REASON_ABORTED, now)
 
-            return self._result_locked(action, False, "unsupported_action", now)
+            return self._result_locked(action, False, REASON_UNSUPPORTED_ACTION, now)
 
     def poll(self) -> Optional[PomodoroTick]:
         """Return tick updates while running (max once per second + completion)."""
         with self._lock:
-            if self._phase != "running":
+            if self._phase != PHASE_RUNNING:
                 return None
 
             now = time.monotonic()
             remaining = self._running_remaining_locked(now)
             if remaining <= 0:
-                if self._phase != "completed":
-                    self._phase = "completed"
+                if self._phase != PHASE_COMPLETED:
+                    self._phase = PHASE_COMPLETED
                     self._terminal_remaining_seconds = 0
                     self._last_emitted_remaining = 0
                     self._logger.info("Pomodoro completed: session=%s", self._session)
@@ -175,9 +203,11 @@ class PomodoroTimer:
         if duration_seconds is not None and int(duration_seconds) > 0:
             self._duration_seconds = int(duration_seconds)
 
-        session_name = _sanitize_session_name(session or self._session or "Focus")
+        session_name = _sanitize_session_name(
+            session or self._session or DEFAULT_POMODORO_SESSION_NAME
+        )
         self._session = session_name
-        self._phase = "running"
+        self._phase = PHASE_RUNNING
         self._started_at_monotonic = now
         self._paused_at_monotonic = None
         self._paused_total_seconds = 0.0
@@ -212,14 +242,14 @@ class PomodoroTimer:
         )
 
     def _current_remaining_locked(self, now: float) -> int:
-        if self._phase == "idle":
+        if self._phase == PHASE_IDLE:
             return self._duration_seconds
-        if self._phase == "running":
+        if self._phase == PHASE_RUNNING:
             return self._running_remaining_locked(now)
-        if self._phase == "paused":
+        if self._phase == PHASE_PAUSED:
             paused_at = self._paused_at_monotonic or now
             return self._running_remaining_locked(paused_at)
-        if self._phase == "completed":
+        if self._phase == PHASE_COMPLETED:
             return 0
         return self._terminal_remaining_seconds
 
@@ -236,4 +266,4 @@ class PomodoroTimer:
 def _sanitize_session_name(name: str) -> str:
     compact = " ".join(name.split())
     compact = compact.strip()[:60]
-    return compact or "Focus"
+    return compact or DEFAULT_POMODORO_SESSION_NAME

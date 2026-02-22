@@ -1,6 +1,9 @@
-# pomodoro-bot
+# Pomodoro Bot
 
-Voice-driven pomodoro assistant prototype.
+`pomodoro-bot` is a local-first voice assistant for focus work and time management.
+Its purpose is to let you control timers and pomodoro sessions hands-free, with optional
+calendar awareness and spoken responses. Core capabilities include wake-word detection,
+speech transcription, structured local LLM tool-calling, TTS playback, and a live web UI.
 
 Current runtime pipeline:
 - wake-word + utterance capture (`stt`)
@@ -11,17 +14,26 @@ Current runtime pipeline:
 
 ## Project layout
 
-- `src/main.py`: app entrypoint and orchestration.
-- `src/stt/`: wake-word capture + STT foundation. See `src/stt/README.md`.
+- `src/main.py`: app entrypoint and dependency bootstrap.
+- `src/app_config.py`, `src/app_config_parser.py`, `src/app_config_schema.py`: runtime config loading and validation.
+- `src/runtime/`: main orchestration loop (events, utterance pipeline, tool dispatch). See `src/runtime/README.md`.
+- `src/stt/`: wake-word capture + transcription foundation. See `src/stt/README.md`.
 - `src/llm/`: local LLM config/download/backend/parser/service. See `src/llm/README.md`.
 - `src/tts/`: TTS model loading + playback service. See `src/tts/README.md`.
-- `src/oracle/`: optional environment context providers (sensors + calendar).
-- `src/pomodoro/`: pomodoro session runtime (`start/pause/continue/abort`) and countdown state.
-- `src/server/`: static UI + websocket server runtime.
-- `web_ui/`: browser UIs (`jarvis/`, `miro/`) served by `src/server`.
-- `src/audio-diagnostic.py`: VAD tuning utility.
-- `setup.sh`: uv-based env bootstrap.
-- `build.sh`: one-file build script (PyInstaller).
+- `src/oracle/`: optional environment context providers (sensors + calendar). See `src/oracle/README.md`.
+- `src/pomodoro/`: pomodoro/timer state machines and tool remapping. See `src/pomodoro/README.md`.
+- `src/server/`: static UI + websocket server runtime. See `src/server/README.md`.
+- `src/contracts/`: canonical tool names and UI protocol constants. See `src/contracts/README.md`.
+- `src/shared/`: shared defaults and environment key constants. See `src/shared/README.md`.
+- `src/debug/audio_diagnostic.py`: interactive VAD tuning utility (`src/debug/README.md`).
+- `web_ui/`: browser UIs (`jarvis/`, `miro/`) served by `src/server` (`web_ui/README.md`).
+- `prompts/`: system prompt templates used by the LLM service.
+- `tests/`: automated tests by module (`tests/README.md`).
+- `config.toml`: non-secret runtime configuration.
+- `.env.dist`: template for environment-based secrets.
+- `models/`: local model storage directory.
+- `setup.sh`: uv-based environment bootstrap.
+- `build.sh`, `main.spec`: one-file build setup (PyInstaller).
 
 ## Requirements
 
@@ -62,7 +74,7 @@ uv --version
 
 Configure runtime settings in `config.toml` (non-secret values).
 
-The repo now includes a default `config.toml` with sections for:
+The repo includes a default `config.toml` with sections for:
 - `wake_word`
 - `stt`
 - `tts`
@@ -84,7 +96,7 @@ Set only secrets in `.env` (or your shell), for example:
 export PICO_VOICE_ACCESS_KEY="..."
 # optional
 # export HF_TOKEN="..."
-# required only when ORACLE_GOOGLE_CALENDAR_ENABLED=true:
+# required only when oracle.google_calendar_enabled=true in config.toml:
 # export ORACLE_GOOGLE_CALENDAR_ID="primary"
 # export ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE="/absolute/path/to/service-account.json"
 ```
@@ -112,7 +124,7 @@ http://127.0.0.1:8765
 
 ```bash
 source .env
-uv run python src/audio-diagnostic.py
+uv run python src/debug/audio_diagnostic.py
 ```
 
 ## Optional Oracle Dependencies

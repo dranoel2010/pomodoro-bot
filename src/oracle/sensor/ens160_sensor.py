@@ -1,3 +1,5 @@
+"""ENS160 air-quality sensor adapter."""
+
 from __future__ import annotations
 
 import logging

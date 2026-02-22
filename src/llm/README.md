@@ -1,26 +1,18 @@
 # llm module
 
-Local LLM module for generating structured assistant responses.
-
 ## Purpose
+Local LLM integration that generates structured assistant replies and normalized tool calls.
 
-- Resolve model file location from typed application config.
-- Download missing GGUF model files from Hugging Face when configured.
-- Run llama.cpp chat completion with grammar-constrained JSON output.
-- Parse and normalize responses into a stable shape.
+## Key files
+- `config.py`: validates model/runtime settings and resolves local model paths.
+- `model_store.py`: downloads and validates GGUF files from Hugging Face.
+- `llama_backend.py`: llama.cpp wrapper with grammar-constrained JSON output.
+- `parser.py`: JSON normalization with compatibility and intent fallback behavior.
+- `service.py`: `PomodoroAssistantLLM` orchestration entrypoint.
+- `types.py`: typed response and environment context payloads.
 
-## Main components
-
-- `config.py`: `LLMConfig` and typed model resolution helpers.
-- `model_store.py`: Hugging Face model download/validation helpers.
-- `llama_backend.py`: llama.cpp backend and grammar.
-- `parser.py`: schema validation and response normalization.
-- `service.py`: `PomodoroAssistantLLM` high-level API.
-- `types.py`: structured response and environment context types.
-
-## Configuration inputs
-
-Configured via `config.toml` (`[llm]` section):
+## Configuration
+From `config.toml` (`[llm]`):
 - `enabled`
 - `model_path`
 - `hf_filename`
@@ -35,11 +27,11 @@ Configured via `config.toml` (`[llm]` section):
 - `repeat_penalty`
 - `verbose`
 
-Secret via environment:
-- `HF_TOKEN` (optional Hugging Face token)
+Secrets from environment:
+- `HF_TOKEN` (optional for private model access)
+- `LLM_SYSTEM_PROMPT` (optional fallback prompt path)
 
-## Integration
-
-`src/main.py` sends transcribed utterance text to `PomodoroAssistantLLM` and optionally speaks `assistant_text` via `tts`.
-When oracle integrations are enabled, `main.py` passes `EnvironmentContext` (air quality, light level, upcoming events) and the LLM service renders configured ENVIRONMENT placeholders in the system prompt template before inference.
-Tool calls are executed by the pomodoro runtime (`timer_start`, `timer_pause`, `timer_continue`, `timer_abort`) with legacy aliases (`timer_stop`, `timer_reset`) still accepted.
+## Integration notes
+- `src/main.py` initializes the module only when `llm.enabled = true`.
+- Runtime tool execution uses canonical tool names from `src/contracts/tool_contract.py`.
+- Parser fallback inference is intentionally enabled when model output is invalid or incomplete.

@@ -1,0 +1,11 @@
+"""Default values reused across runtime, LLM, and calendar helpers."""
+
+from __future__ import annotations
+
+DEFAULT_TIMER_MINUTES = 10
+DEFAULT_TIMER_DURATION_SECONDS = DEFAULT_TIMER_MINUTES * 60
+DEFAULT_CALENDAR_EVENT_DURATION_SECONDS = 30 * 60
+
+DEFAULT_FOCUS_TOPIC_DE = "Fokus"
+DEFAULT_TIMER_SESSION_NAME = "Timer"
+DEFAULT_CALENDAR_TIME_RANGE = "heute"

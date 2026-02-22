@@ -1,3 +1,5 @@
+"""Oracle integration error hierarchy."""
+
 class OracleError(Exception):
     """Base exception for oracle integrations."""
 

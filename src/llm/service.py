@@ -1,10 +1,14 @@
+"""High-level LLM service that renders prompts and parses model output."""
+
 import logging
 import os
 import sys
 from pathlib import Path
 from typing import Optional
 
-from tool_contract import tool_names_one_of_csv
+from shared.defaults import DEFAULT_TIMER_MINUTES
+from shared.env_keys import ENV_LLM_SYSTEM_PROMPT
+from contracts.tool_contract import tool_names_one_of_csv
 
 from .config import LLMConfig
 from .llama_backend import LlamaBackend
@@ -13,11 +17,11 @@ from .types import EnvironmentContext, StructuredResponse
 
 
 class PomodoroAssistantLLM:
+    """End-to-end assistant wrapper that renders prompts and parses structured replies."""
     def __init__(self, config: LLMConfig):
         self._logger = logging.getLogger(__name__)
         self._config = config
         self._backend = LlamaBackend(config)
-        self._parser = ResponseParser()
         self._system_prompt_template = self._build_system_message()
 
     @classmethod
@@ -49,7 +53,7 @@ class PomodoroAssistantLLM:
     def _build_system_message(self) -> str:
         path = (self._config.system_prompt_path or "").strip()
         if not path:
-            path = os.getenv("LLM_SYSTEM_PROMPT", "").strip()
+            path = os.getenv(ENV_LLM_SYSTEM_PROMPT, "").strip()
         if not path:
             return self._default_system_message()
 
@@ -121,7 +125,7 @@ class PomodoroAssistantLLM:
             "- Kein Markdown, keine Code-Fences, keine Zusatzschluessel.\n"
             "- Pro Antwort genau EIN Tool-Call oder null.\n"
             "- Bei klarer Tool-Absicht MUSST du tool_call setzen.\n"
-            '- start_timer braucht arguments.duration (Default: "10").\n'
+            f'- start_timer braucht arguments.duration (Default: "{DEFAULT_TIMER_MINUTES}").\n'
             "- start_pomodoro_session braucht arguments.focus_topic.\n"
             "- show_upcoming_events braucht arguments.time_range.\n"
             "- add_calendar_event braucht mindestens arguments.title und arguments.start_time.\n"
@@ -152,7 +156,10 @@ class PomodoroAssistantLLM:
         messages.append({"role": "user", "content": user_prompt.strip()})
         content = self._backend.complete(messages, max_tokens=max_tokens)
         self._logger.info(content)
-        return self._parser.parse(content, user_prompt)
+        # Use a short-lived parser instance per request to avoid cross-request
+        # mutable state coupling inside the service lifecycle.
+        parser = ResponseParser()
+        return parser.parse(content, user_prompt)
 
     def _render_system_message(self, env: Optional[EnvironmentContext]) -> str:
         content = self._system_prompt_template

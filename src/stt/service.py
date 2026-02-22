@@ -1,3 +1,5 @@
+"""Wake-word detection service coordinating Porcupine and utterance capture."""
+
 import logging
 import threading
 from contextlib import contextmanager
