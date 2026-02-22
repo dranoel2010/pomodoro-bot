@@ -111,7 +111,6 @@ The repo includes a default `config.toml` with sections for:
 
 UI selection settings:
 - `ui_server.ui`: built-in UI variant (`jarvis` or `miro`)
-- `ui_server.index_file`: optional explicit index file path override
 
 Required first edit in `config.toml`:
 - `wake_word.ppn_file`

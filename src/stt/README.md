@@ -23,3 +23,4 @@ Secrets from environment:
 - `WakeWordService` emits events (`WakeWordDetectedEvent`, `UtteranceCapturedEvent`, `WakeWordErrorEvent`).
 - Runtime consumes emitted utterances and forwards them to `FasterWhisperSTT`.
 - Adaptive thresholding calibrates against ambient noise on startup.
+- `FasterWhisperSTT` stores downloaded whisper checkpoints in `models/stt` by default.

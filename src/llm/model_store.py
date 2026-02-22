@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from huggingface_hub import snapshot_download, hf_hub_download
+from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
 
 
@@ -95,20 +95,36 @@ def ensure_model_downloaded(
 
     target_path = models_dir / spec.filename
 
-    # Check if file already exists and is valid
-    if target_path.is_file():
-        try:
-            size = target_path.stat().st_size
-            if size > 0:
-                if validate_gguf and not _validate_gguf_file(target_path, logger):
-                    logger.warning(
-                        f"Existing file {target_path} failed GGUF validation, re-downloading"
-                    )
-                else:
-                    logger.info(f"Model already exists: {target_path} ({size:,} bytes)")
-                    return target_path
-        except OSError as e:
-            logger.warning(f"Cannot stat existing file {target_path}: {e}")
+    # Reject symlink placeholders and only trust regular files.
+    if target_path.exists():
+        if target_path.is_symlink():
+            logger.warning(
+                "Existing model path %s is a symlink; replacing it with a regular file",
+                target_path,
+            )
+            try:
+                target_path.unlink()
+            except OSError as e:
+                raise ModelDownloadError(
+                    f"Failed to remove symlinked model file {target_path}: {e}"
+                ) from e
+        elif target_path.is_file():
+            try:
+                size = target_path.stat().st_size
+                if size > 0:
+                    if validate_gguf and not _validate_gguf_file(target_path, logger):
+                        logger.warning(
+                            f"Existing file {target_path} failed GGUF validation, re-downloading"
+                        )
+                    else:
+                        logger.info(f"Model already exists: {target_path} ({size:,} bytes)")
+                        return target_path
+            except OSError as e:
+                logger.warning(f"Cannot stat existing file {target_path}: {e}")
+        else:
+            raise ModelDownloadError(
+                f"Model path exists but is not a regular file: {target_path}"
+            )
 
     # Download from Hugging Face using hf_hub_download (more reliable than snapshot_download)
     logger.info(

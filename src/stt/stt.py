@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 import numpy as np
 from faster_whisper import WhisperModel
@@ -33,6 +34,7 @@ class FasterWhisperSTT:
         language: Optional[str] = "en",
         beam_size: int = 5,
         vad_filter: bool = True,
+        download_root: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize faster-whisper STT.
@@ -57,16 +59,34 @@ class FasterWhisperSTT:
             f"(device={device}, compute_type={compute_type})"
         )
 
+        download_root_path = self._resolve_download_root(download_root)
+        self._logger.debug("Using faster-whisper download root: %s", download_root_path)
+
         try:
             self._model = WhisperModel(
                 model_size,
                 device=device,
                 compute_type=compute_type,
-                download_root=None,  # Use default cache
+                download_root=str(download_root_path),
             )
             self._logger.debug("Model loaded successfully")
         except Exception as e:
             raise STTError(f"Failed to load model: {e}") from e
+
+    @staticmethod
+    def _resolve_download_root(download_root: Optional[str]) -> Path:
+        root = (
+            Path(download_root).expanduser()
+            if download_root and download_root.strip()
+            else Path("models") / "stt"
+        )
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise STTError(
+                f"Failed to create STT model download directory {root}: {error}"
+            ) from error
+        return root
 
     def transcribe(self, utterance: Utterance) -> TranscriptionResult:
         """Transcribe an utterance to text.
@@ -157,6 +177,7 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
         beam_size: int = 5,
         vad_filter: bool = True,
         min_silence_duration_ms: int = 500,
+        download_root: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize streaming faster-whisper STT.
@@ -172,6 +193,7 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
             language=language,
             beam_size=beam_size,
             vad_filter=vad_filter,
+            download_root=download_root,
             logger=logger,
         )
         self._min_silence_duration_ms = min_silence_duration_ms
