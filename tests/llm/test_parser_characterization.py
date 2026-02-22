@@ -171,6 +171,124 @@ class ResponseParserCharacterizationTests(unittest.TestCase):
             tool_call["arguments"]["start_time"],
         )
 
+    def test_model_relative_datetime_argument_is_normalized(self) -> None:
+        parser = ResponseParser()
+        content = json.dumps(
+            {
+                "assistant_text": "",
+                "tool_call": {
+                    "name": "add_calendar_event",
+                    "arguments": {
+                        "title": "Leo treffen",
+                        "start_time": "heute 10 Uhr",
+                    },
+                },
+            }
+        )
+
+        with patch("llm.parser.datetime", _FrozenDateTime):
+            result = parser.parse(
+                content,
+                "erstelle einen termin heute um 10 uhr mit dem title Leo treffen",
+            )
+
+        tool_call = result["tool_call"]
+        self.assertIsNotNone(tool_call)
+        if tool_call is None:
+            self.fail("Expected normalized calendar tool_call")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=10,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual("add_calendar_event", tool_call["name"])
+        self.assertEqual("Leo treffen", tool_call["arguments"]["title"])
+        self.assertEqual(
+            expected.isoformat(timespec="minutes"),
+            tool_call["arguments"]["start_time"],
+        )
+
+    def test_fallback_add_calendar_detects_erstelle_phrase(self) -> None:
+        parser = ResponseParser()
+        with patch("llm.parser.datetime", _FrozenDateTime):
+            result = parser.parse(
+                "",
+                "erstelle einen termin heute um 10 uhr mit dem title Leo treffen",
+            )
+
+        tool_call = result["tool_call"]
+        self.assertIsNotNone(tool_call)
+        if tool_call is None:
+            self.fail("Expected inferred calendar tool_call")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=10,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual("add_calendar_event", tool_call["name"])
+        self.assertEqual("Leo treffen", tool_call["arguments"]["title"])
+        self.assertEqual(
+            expected.isoformat(timespec="minutes"),
+            tool_call["arguments"]["start_time"],
+        )
+
+    def test_fallback_add_calendar_accepts_dot_time_format(self) -> None:
+        parser = ResponseParser()
+        with patch("llm.parser.datetime", _FrozenDateTime):
+            result = parser.parse(
+                "",
+                "Erstelle einen Termin mit dem Titel Leotreffen für heute um 0.45 Uhr.",
+            )
+
+        tool_call = result["tool_call"]
+        self.assertIsNotNone(tool_call)
+        if tool_call is None:
+            self.fail("Expected inferred calendar tool_call")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=0,
+            minute=45,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual("add_calendar_event", tool_call["name"])
+        self.assertEqual("Leotreffen", tool_call["arguments"]["title"])
+        self.assertEqual(
+            expected.isoformat(timespec="minutes"),
+            tool_call["arguments"]["start_time"],
+        )
+
+    def test_incomplete_json_falls_back_to_prompt_for_dot_time(self) -> None:
+        parser = ResponseParser()
+        content = (
+            '{\n'
+            '  "assistant_text": "Termin wird hinzugefuegt.",\n'
+            '  "tool_call": {"name": "add_calendar_event", "arguments": {"title": "Leotreffen",\n'
+        )
+        with patch("llm.parser.datetime", _FrozenDateTime):
+            result = parser.parse(
+                content,
+                "Erstelle einen Termin mit dem Titel Leotreffen für heute um 0.45 Uhr.",
+            )
+
+        tool_call = result["tool_call"]
+        self.assertIsNotNone(tool_call)
+        if tool_call is None:
+            self.fail("Expected inferred calendar tool_call")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=0,
+            minute=45,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual("add_calendar_event", tool_call["name"])
+        self.assertEqual("Leotreffen", tool_call["arguments"]["title"])
+        self.assertEqual(
+            expected.isoformat(timespec="minutes"),
+            tool_call["arguments"]["start_time"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

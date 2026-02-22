@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 from shared.defaults import (
     DEFAULT_CALENDAR_TIME_RANGE,
@@ -28,6 +28,7 @@ from .parser_extractors import (
     extract_duration_from_prompt,
     extract_focus_topic,
     extract_time_range,
+    normalize_calendar_datetime_input,
     normalize_duration,
     sanitize_text,
     sanitize_time_range,
@@ -206,16 +207,20 @@ class ResponseParser:
             return {"time_range": time_range}
 
         if tool_name == TOOL_ADD_CALENDAR_EVENT:
+            now_local = datetime.now().astimezone()
+            now_fn = lambda: now_local
             title = sanitize_text(
                 arguments.get("title") or extract_calendar_title(user_prompt),
                 max_len=120,
             )
-            start_time = sanitize_text(
-                arguments.get("start_time")
-                or self._extract_datetime_literal(user_prompt),
-                max_len=64,
+            start_time = normalize_calendar_datetime_input(
+                arguments.get("start_time"),
+                now_fn=now_fn,
+            ) or self._extract_datetime_literal(user_prompt, now_fn=now_fn)
+            end_time = normalize_calendar_datetime_input(
+                arguments.get("end_time"),
+                now_fn=now_fn,
             )
-            end_time = sanitize_text(arguments.get("end_time"), max_len=64)
             duration = normalize_duration(arguments.get("duration"))
 
             if not title or not start_time:
@@ -275,9 +280,7 @@ class ResponseParser:
         if has_timer or duration is not None:
             name = INTENT_TO_TIMER_TOOL[action]
             seed_args = (
-                {"duration": duration}
-                if duration and name == TOOL_START_TIMER
-                else {}
+                {"duration": duration} if duration and name == TOOL_START_TIMER else {}
             )
             arguments = self._normalize_arguments_for_tool(name, seed_args, prompt)
             if arguments is None:
@@ -292,10 +295,15 @@ class ResponseParser:
         return normalize_assistant_text(text, tool_call)
 
     @staticmethod
-    def _extract_datetime_literal(prompt: str) -> Optional[str]:
+    def _extract_datetime_literal(
+        prompt: str,
+        *,
+        now_fn: Optional[Callable[[], datetime]] = None,
+    ) -> Optional[str]:
+        effective_now_fn = now_fn or (lambda: datetime.now().astimezone())
         return extract_datetime_literal(
             prompt,
-            now_fn=lambda: datetime.now().astimezone(),
+            now_fn=effective_now_fn,
         )
 
     def _fallback_assistant_text(self, tool_call: Optional[ToolCall]) -> str:

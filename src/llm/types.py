@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import datetime as dt
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, TypedDict
 
@@ -87,9 +88,11 @@ class EnvironmentContext:
 
         first_event = events[0] if isinstance(events[0], dict) else {}
         summary = str(first_event.get("summary") or "Termin ohne Titel").strip()
-        start = str(first_event.get("start") or "").strip()
-        if start:
-            return f"{summary} um {start}"
+        start_raw = first_event.get("start")
+        end_raw = first_event.get("end")
+        event_text = self._format_event_window(start_raw, end_raw)
+        if event_text:
+            return f"{summary} ({event_text})"
         return summary
 
     def _format_air_quality(self) -> str:
@@ -133,3 +136,79 @@ class EnvironmentContext:
             return dt.datetime.fromisoformat(normalized)
         except ValueError:
             return None
+
+    @staticmethod
+    def _to_reference_timezone(
+        value: dt.datetime,
+        *,
+        reference: dt.datetime,
+    ) -> dt.datetime:
+        target_tz = reference.tzinfo or dt.timezone.utc
+        if value.tzinfo is None:
+            return value.replace(tzinfo=target_tz)
+        return value.astimezone(target_tz)
+
+    @staticmethod
+    def _relative_day_label(target: dt.date, reference: dt.date) -> str:
+        if target == reference:
+            return "heute"
+        if target == (reference + dt.timedelta(days=1)):
+            return "morgen"
+        if target == (reference - dt.timedelta(days=1)):
+            return "gestern"
+        return f"am {target.day:02d}.{target.month:02d}.{target.year}"
+
+    def _parse_event_datetime(self, value: Any) -> Optional[dt.datetime]:
+        if not isinstance(value, str):
+            return None
+        raw = value.strip()
+        if not raw:
+            return None
+
+        normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        try:
+            parsed = dt.datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+
+        reference = self._parse_now_local() or dt.datetime.now().astimezone()
+        return self._to_reference_timezone(parsed, reference=reference)
+
+    @staticmethod
+    def _is_all_day_date_string(value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()))
+
+    def _format_event_point(self, value: Any) -> Optional[str]:
+        parsed = self._parse_event_datetime(value)
+        if parsed is None:
+            return None
+
+        reference = self._parse_now_local() or dt.datetime.now().astimezone()
+        day_label = self._relative_day_label(parsed.date(), reference.date())
+        if self._is_all_day_date_string(value):
+            return f"{day_label}, ganztaegig"
+        return f"{day_label} um {parsed.strftime('%H:%M')}"
+
+    def _format_event_window(self, start_value: Any, end_value: Any) -> Optional[str]:
+        start_point = self._format_event_point(start_value)
+        if start_point is None:
+            return None
+        if self._is_all_day_date_string(start_value):
+            return start_point
+
+        start_dt = self._parse_event_datetime(start_value)
+        end_dt = self._parse_event_datetime(end_value)
+        if start_dt is None or end_dt is None:
+            return start_point
+
+        if start_dt.date() == end_dt.date():
+            reference = self._parse_now_local() or dt.datetime.now().astimezone()
+            day_label = self._relative_day_label(start_dt.date(), reference.date())
+            return f"{day_label} von {start_dt.strftime('%H:%M')} bis {end_dt.strftime('%H:%M')}"
+
+        end_point = self._format_event_point(end_value)
+        if end_point is None:
+            return start_point
+        return f"von {start_point} bis {end_point}"

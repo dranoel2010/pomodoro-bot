@@ -172,4 +172,6 @@ uv run python src/debug/audio_diagnostic.py
 
 - Google Calendar: `google-auth`, `google-api-python-client`
 - ENS160 sensor: `adafruit-blinka`, `adafruit-circuitpython-ens160`
+  - Raspberry Pi 5 note: install `rpi-lgpio` (which provides `RPi.GPIO`
+    compatibility) and do not keep `RPi.GPIO` installed in the same virtualenv.
 - TEMT6000 via ADS1115: `Adafruit_ADS1x15`
