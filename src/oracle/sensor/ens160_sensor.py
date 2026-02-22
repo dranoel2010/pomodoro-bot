@@ -25,17 +25,44 @@ class ENS160Sensor:
 
     def _create_sensor(self):
         try:
-            import board
-            import adafruit_ens160
+            import adafruit_ens160 as ens160_module
         except ImportError as error:  # pragma: no cover - depends on hardware env
             raise OracleDependencyError(
-                "ENS160 dependencies missing. Install adafruit-blinka and "
+                "ENS160 dependency import failed "
+                f"({error}). Install adafruit-blinka and "
                 "adafruit-circuitpython-ens160."
             ) from error
 
         try:
-            i2c = board.I2C()
-            sensor = adafruit_ens160.ENS160(i2c)
+            import board as board_module
+        except ModuleNotFoundError as error:  # pragma: no cover - depends on hardware env
+            # Blinka may import pkg_resources when it cannot detect a supported board.
+            if error.name == "pkg_resources":
+                raise OracleDependencyError(
+                    "ENS160 runtime import failed because pkg_resources is missing "
+                    "while importing board. Install a setuptools release that "
+                    "provides pkg_resources (for example, setuptools<81)."
+                ) from error
+            raise OracleDependencyError(
+                "ENS160 dependency import failed "
+                f"({error}). Install adafruit-blinka and "
+                "adafruit-circuitpython-ens160."
+            ) from error
+        except ImportError as error:  # pragma: no cover - depends on hardware env
+            raise OracleDependencyError(
+                "ENS160 dependency import failed "
+                f"({error}). Install adafruit-blinka and "
+                "adafruit-circuitpython-ens160."
+            ) from error
+        except NotImplementedError as error:  # pragma: no cover - depends on hardware env
+            raise OracleReadError(
+                "ENS160 unsupported on this host. Blinka could not identify a "
+                "supported board."
+            ) from error
+
+        try:
+            i2c = board_module.I2C()
+            sensor = ens160_module.ENS160(i2c)
             sensor.temperature_compensation = self._temperature_compensation_c
             sensor.humidity_compensation = self._humidity_compensation_pct
             return sensor
