@@ -45,32 +45,59 @@ Current runtime pipeline:
   - wake-word model (`.ppn`)
   - Porcupine params (`.pv`)
 
-## Build Artifact Behavior
+## Setup
 
-- The packaged binary bundles Porcupine default package assets from `pvporcupine` (keyword resources + native libraries) so startup can reach app config loading.
-- `config.toml` is not embedded in the one-file executable. Provide it externally via `APP_CONFIG_FILE` or place it next to the binary.
-- Custom wake-word assets configured in `config.toml` (`wake_word.ppn_file`, `wake_word.pv_file`) are not bundled and must be present on the target machine.
-- App model directories under `models/` are not bundled.
-- LLM/TTS model files are expected to be downloaded on demand from Hugging Face when configured.
+### Run from source
 
-### Raspberry Pi 5 prerequisites
+#### Raspberry/Bookworm
 
 Tested target: Raspberry Pi OS 64-bit (Bookworm).
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip curl git libasound2-dev
-python3 --version
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source ~/.local/bin/env
-uv --version
+
+git clone https://github.com/dranoel2010/pomodoro-bot.git
+# or (SSH):
+# git clone git@github.com:dranoel2010/pomodoro-bot.git
+cd pomodoro-bot
+./setup.sh
+source .venv/bin/activate
 ```
 
-## Setup
+#### macOS
 
 ```bash
+brew install uv python@3.11 portaudio git
+
+git clone https://github.com/dranoel2010/pomodoro-bot.git
+# or (SSH):
+# git clone git@github.com:dranoel2010/pomodoro-bot.git
+cd pomodoro-bot
 ./setup.sh
+source .venv/bin/activate
 ```
+
+### Run from release
+
+#### Raspberry/Bookworm
+
+```bash
+sudo apt update
+sudo apt install -y libasound2
+
+mkdir pomodoro-bot
+cd pomodoro-bot
+# Download and extract the release archive from GitHub Releases.
+# Example:
+# curl -L -o pomodoro-bot-release.tar.gz https://github.com/dranoel2010/pomodoro-bot/releases/latest/download/pomodoro-bot-release.tar.gz
+# (if the asset name differs, download it from https://github.com/dranoel2010/pomodoro-bot/releases)
+tar -xzf pomodoro-bot-release.tar.gz
+```
+
+### Configure runtime (all install methods)
 
 Configure runtime settings in `config.toml` (non-secret values).
 
@@ -107,7 +134,7 @@ If you want to use a different config file path:
 export APP_CONFIG_FILE="/absolute/path/to/config.toml"
 ```
 
-## Run
+## Run (source checkout)
 
 ```bash
 source .env
@@ -119,6 +146,21 @@ Then open the UI at:
 ```text
 http://127.0.0.1:8765
 ```
+
+## Run (release download)
+
+```bash
+source .env
+./main
+```
+
+Then open the UI at:
+
+```text
+http://127.0.0.1:8765
+```
+
+For release archives, run the packaged binary from the extracted release directory.
 
 ## Diagnostics
 
