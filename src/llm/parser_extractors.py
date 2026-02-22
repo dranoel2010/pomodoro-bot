@@ -54,7 +54,7 @@ def normalize_calendar_datetime_input(
         pass
 
     de_match = re.fullmatch(
-        r"(\d{1,2})\.(\d{1,2})\.(\d{4})\s*(?:um|,)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?",
+        r"(\d{1,2})\.(\d{1,2})\.(\d{4})\s*(?:um|,)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*(?:uhr)?",
         raw,
         re.I,
     )
@@ -78,7 +78,7 @@ def normalize_calendar_datetime_input(
         return parsed.isoformat(timespec="minutes")
 
     relative_match = re.fullmatch(
-        r"(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?",
+        r"(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(?:uhr)?",
         raw,
         re.I,
     )
@@ -234,19 +234,19 @@ def extract_datetime_literal(
         )
 
     de_match = re.search(
-        r"\b(\d{1,2}\.\d{1,2}\.\d{4})\s*(?:um|,)?\s*(\d{1,2}:\d{2})\b",
+        r"\b(\d{1,2}\.\d{1,2}\.\d{4})\s*(?:um|,)?\s*(\d{1,2}[:.]\d{2})\b",
         prompt,
         re.I,
     )
     if de_match:
         date_part, time_part = de_match.groups()
         return normalize_calendar_datetime_input(
-            f"{date_part} {time_part}",
+            f"{date_part} {time_part.replace('.', ':')}",
             now_fn=now_fn,
         )
 
     relative_match = re.search(
-        r"\b(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?::(\d{2}))?\s*uhr?\b",
+        r"\b(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*uhr?\b",
         prompt,
         re.I,
     )

@@ -14,6 +14,8 @@ if "runtime" not in sys.modules:
     sys.modules["runtime"] = _pkg
 
 from runtime.calendar_tools import (
+    format_calendar_value_natural,
+    format_calendar_window_natural,
     handle_calendar_tool_call,
     parse_calendar_datetime,
     parse_duration_seconds,
@@ -56,6 +58,13 @@ class _AppConfigStub:
 
 
 class CalendarToolsTests(unittest.TestCase):
+    def test_window_format_uses_spoken_time(self) -> None:
+        now = dt.datetime(2026, 2, 21, 10, 0, tzinfo=dt.timezone.utc)
+        start = dt.datetime(2026, 2, 21, 8, 0, tzinfo=dt.timezone.utc)
+        end = dt.datetime(2026, 2, 21, 14, 45, tzinfo=dt.timezone.utc)
+        text = format_calendar_window_natural(start, end, now=now)
+        self.assertEqual("heute von 8 Uhr bis 14 Uhr 45", text)
+
     def test_parse_duration_seconds_supports_common_units(self) -> None:
         self.assertEqual(15 * 60, parse_duration_seconds("15", default_seconds=60))
         self.assertEqual(90, parse_duration_seconds("90s", default_seconds=60))
@@ -89,6 +98,21 @@ class CalendarToolsTests(unittest.TestCase):
         )
         self.assertEqual(expected, parsed)
 
+    def test_parse_calendar_datetime_accepts_relative_dot_time(self) -> None:
+        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+            parsed = parse_calendar_datetime("heute 0.45 Uhr")
+
+        self.assertIsNotNone(parsed)
+        if parsed is None:
+            self.fail("Expected parsed datetime")
+        expected = _FrozenDateTime.now().astimezone().replace(
+            hour=0,
+            minute=45,
+            second=0,
+            microsecond=0,
+        )
+        self.assertEqual(expected, parsed)
+
     def test_show_upcoming_events_filters_by_time_range(self) -> None:
         oracle = _OracleStub(
             events=[
@@ -106,9 +130,16 @@ class CalendarToolsTests(unittest.TestCase):
                 app_config=app_config,
                 logger=logging.getLogger("test"),
             )
+            expected_start_text = format_calendar_value_natural(
+                "2026-02-22T09:00:00+00:00",
+                now=_FrozenDateTime.now().astimezone(),
+            )
 
         self.assertIn("Standup", message)
         self.assertNotIn("Far Future", message)
+        self.assertIsNotNone(expected_start_text)
+        if expected_start_text is not None:
+            self.assertIn(expected_start_text, message)
         self.assertEqual(1, len(oracle.list_calls))
         self.assertEqual(6, oracle.list_calls[0]["max_results"])
 
@@ -116,19 +147,20 @@ class CalendarToolsTests(unittest.TestCase):
         oracle = _OracleStub(event_id="evt-42")
         app_config = _AppConfigStub()
 
-        message = handle_calendar_tool_call(
-            tool_name="add_calendar_event",
-            arguments={
-                "title": "Review",
-                "start_time": "2026-02-21T12:00:00+00:00",
-                "duration": "45",
-            },
-            oracle_service=oracle,
-            app_config=app_config,
-            logger=logging.getLogger("test"),
-        )
+        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+            message = handle_calendar_tool_call(
+                tool_name="add_calendar_event",
+                arguments={
+                    "title": "Review",
+                    "start_time": "2026-02-21T12:00:00+00:00",
+                    "duration": "45",
+                },
+                oracle_service=oracle,
+                app_config=app_config,
+                logger=logging.getLogger("test"),
+            )
 
-        self.assertIn("evt-42", message)
+        self.assertIn("Termin angelegt: Review", message)
         self.assertEqual(1, len(oracle.add_calls))
         start = oracle.add_calls[0]["start"]
         end = oracle.add_calls[0]["end"]
@@ -137,6 +169,12 @@ class CalendarToolsTests(unittest.TestCase):
         if not isinstance(start, dt.datetime) or not isinstance(end, dt.datetime):
             self.fail("Expected datetime arguments")
         self.assertEqual(45 * 60, int((end - start).total_seconds()))
+        expected_window = format_calendar_window_natural(
+            start,
+            end,
+            now=_FrozenDateTime.now().astimezone(),
+        )
+        self.assertIn(f"Zeit: {expected_window}", message)
 
     def test_add_calendar_event_accepts_relative_start_time(self) -> None:
         oracle = _OracleStub(event_id="evt-77")
@@ -154,7 +192,7 @@ class CalendarToolsTests(unittest.TestCase):
                 logger=logging.getLogger("test"),
             )
 
-        self.assertIn("evt-77", message)
+        self.assertIn("Termin angelegt: Leo treffen", message)
         self.assertEqual(1, len(oracle.add_calls))
         start = oracle.add_calls[0]["start"]
         end = oracle.add_calls[0]["end"]
@@ -163,6 +201,12 @@ class CalendarToolsTests(unittest.TestCase):
         if not isinstance(start, dt.datetime) or not isinstance(end, dt.datetime):
             self.fail("Expected datetime arguments")
         self.assertEqual(30 * 60, int((end - start).total_seconds()))
+        expected_window = format_calendar_window_natural(
+            start,
+            end,
+            now=_FrozenDateTime.now().astimezone(),
+        )
+        self.assertIn(f"Zeit: {expected_window}", message)
 
     def test_calendar_tools_require_oracle_service(self) -> None:
         message = handle_calendar_tool_call(
