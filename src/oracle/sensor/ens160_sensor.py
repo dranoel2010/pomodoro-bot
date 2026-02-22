@@ -43,6 +43,13 @@ class ENS160Sensor:
                     "while importing board. Install a setuptools release that "
                     "provides pkg_resources (for example, setuptools<81)."
                 ) from error
+            if error.name == "lgpio":
+                raise OracleDependencyError(
+                    "ENS160 runtime import failed because lgpio is missing while "
+                    "importing board. On Raspberry Pi install rpi-lgpio (which "
+                    "provides RPi.GPIO compatibility on Bookworm/Pi 5) and ensure "
+                    "RPi.GPIO is not installed in the same environment."
+                ) from error
             raise OracleDependencyError(
                 "ENS160 dependency import failed "
                 f"({error}). Install adafruit-blinka and "

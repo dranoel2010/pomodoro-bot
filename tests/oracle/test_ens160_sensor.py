@@ -88,6 +88,22 @@ class ENS160SensorTests(unittest.TestCase):
 
         self.assertIn("unsupported on this host", str(context.exception))
 
+    def test_missing_lgpio_reports_pi_specific_dependency_error(self) -> None:
+        error = ModuleNotFoundError(
+            "No module named 'lgpio'",
+            name="lgpio",
+        )
+        with patch(
+            "builtins.__import__",
+            side_effect=_build_import_hook(board_error=error),
+        ):
+            with self.assertRaises(OracleDependencyError) as context:
+                ENS160Sensor()
+
+        message = str(context.exception)
+        self.assertIn("lgpio", message)
+        self.assertIn("rpi-lgpio", message)
+
     def test_missing_ens160_module_reports_dependency_error(self) -> None:
         error = ModuleNotFoundError(
             "No module named 'adafruit_ens160'",
