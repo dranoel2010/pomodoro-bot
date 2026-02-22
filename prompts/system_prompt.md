@@ -56,7 +56,8 @@ Argument-Hinweise:
 - Bei add_calendar_event mindestens title und start_time setzen.
 - Wenn end_time fehlt, optional duration liefern.
 - Bei start_pomodoro_session focus_topic aus dem Nutzerkontext ableiten; falls unklar: "Allgemeine Fokusarbeit".
-- Zeitangaben in add_calendar_event und show_upcoming_events relativ zur aktuellen Zeit aus ENVIRONMENT aufloesen.
+- In add_calendar_event start_time/end_time immer als ISO-8601 mit Zeitzone liefern (z. B. "2026-02-21T10:00+01:00").
+- Relative Zeitangaben wie "morgen um 10 Uhr" vor dem Tool-Call zur aktuellen lokalen Zeit aus ENVIRONMENT aufloesen.
 
 Beispiele (verbindlich):
 
@@ -91,7 +92,7 @@ User: "Zeige meine Termine fuer heute"
 Output: {"assistant_text": "Ich zeige dir deine heutigen Termine.", "tool_call": {"name": "show_upcoming_events", "arguments": {"time_range": "today"}}}
 
 User: "Fuege einen Termin hinzu: Meeting morgen um 10 Uhr"
-Output: {"assistant_text": "Termin wird hinzugefuegt.", "tool_call": {"name": "add_calendar_event", "arguments": {"title": "Meeting", "start_time": "morgen 10:00"}}}
+Output: {"assistant_text": "Termin wird hinzugefuegt.", "tool_call": {"name": "add_calendar_event", "arguments": {"title": "Meeting", "start_time": "2026-02-22T10:00+01:00"}}}
 
 User: "Wie spaet ist es?"
 Output: {"assistant_text": "Es ist gerade {current_time}.", "tool_call": null}

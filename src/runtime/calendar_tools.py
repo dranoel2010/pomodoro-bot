@@ -5,6 +5,8 @@ import logging
 import re
 from typing import Any, Optional
 
+from spoken_time import format_spoken_clock
+
 from .contracts import AppConfigLike, CalendarOracleLike
 
 
@@ -37,28 +39,133 @@ def parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
     if not raw:
         return None
 
-    raw = raw.replace(" ", "T")
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
+    iso_candidate = raw.replace(" ", "T")
+    if iso_candidate.endswith("Z"):
+        iso_candidate = iso_candidate[:-1] + "+00:00"
     try:
-        parsed = dt.datetime.fromisoformat(raw)
+        parsed = dt.datetime.fromisoformat(iso_candidate)
     except ValueError:
-        de_match = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})T(\d{1,2}):(\d{2})$", raw)
-        if not de_match:
-            return None
-        day, month, year, hour, minute = de_match.groups()
-        parsed = dt.datetime(
-            year=int(year),
-            month=int(month),
-            day=int(day),
-            hour=int(hour),
-            minute=int(minute),
+        de_match = re.match(
+            r"^(\d{1,2})\.(\d{1,2})\.(\d{4})\s*(?:um|,)?\s*(\d{1,2})(?:[:.](\d{2}))?\s*(?:uhr)?$",
+            raw,
+            re.I,
         )
+        if de_match:
+            day, month, year, hour_raw, minute_raw = de_match.groups()
+            hour = int(hour_raw)
+            minute = int(minute_raw or "0")
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return None
+            try:
+                parsed = dt.datetime(
+                    year=int(year),
+                    month=int(month),
+                    day=int(day),
+                    hour=hour,
+                    minute=minute,
+                )
+            except ValueError:
+                return None
+        else:
+            relative_match = re.match(
+                r"^(heute|morgen|uebermorgen|übermorgen)\s*(?:um\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(?:uhr)?$",
+                raw,
+                re.I,
+            )
+            if not relative_match:
+                return None
+            day_token, hour_raw, minute_raw = relative_match.groups()
+            hour = int(hour_raw)
+            minute = int(minute_raw or "0")
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return None
+            day_key = day_token.lower()
+            offset_days = {"heute": 0, "morgen": 1, "uebermorgen": 2, "übermorgen": 2}
+            now = dt.datetime.now().astimezone()
+            parsed = (now + dt.timedelta(days=offset_days[day_key])).replace(
+                hour=hour,
+                minute=minute,
+                second=0,
+                microsecond=0,
+            )
 
     if parsed.tzinfo is None:
         local_tz = dt.datetime.now().astimezone().tzinfo or dt.timezone.utc
         return parsed.replace(tzinfo=local_tz)
     return parsed
+
+
+def _to_reference_timezone(
+    value: dt.datetime,
+    *,
+    reference: dt.datetime,
+) -> dt.datetime:
+    target_tz = reference.tzinfo or dt.timezone.utc
+    if value.tzinfo is None:
+        return value.replace(tzinfo=target_tz)
+    return value.astimezone(target_tz)
+
+
+def _relative_day_label(target: dt.date, reference: dt.date) -> str:
+    if target == reference:
+        return "heute"
+    if target == (reference + dt.timedelta(days=1)):
+        return "morgen"
+    if target == (reference - dt.timedelta(days=1)):
+        return "gestern"
+    return f"am {target.day:02d}.{target.month:02d}.{target.year}"
+
+
+def format_calendar_datetime_natural(
+    value: dt.datetime,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> str:
+    reference = now or dt.datetime.now().astimezone()
+    localized = _to_reference_timezone(value, reference=reference)
+    day_label = _relative_day_label(localized.date(), reference.date())
+    return f"{day_label} um {format_spoken_clock(localized)}"
+
+
+def format_calendar_value_natural(
+    value: Any,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> Optional[str]:
+    raw = value.strip() if isinstance(value, str) else ""
+    reference = now or dt.datetime.now().astimezone()
+
+    is_all_day = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw))
+    parsed = parse_calendar_datetime(value)
+    if parsed is None:
+        return None
+
+    localized = _to_reference_timezone(parsed, reference=reference)
+    day_label = _relative_day_label(localized.date(), reference.date())
+    if is_all_day:
+        return f"{day_label}, ganztaegig"
+    return f"{day_label} um {format_spoken_clock(localized)}"
+
+
+def format_calendar_window_natural(
+    start: dt.datetime,
+    end: dt.datetime,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> str:
+    reference = now or dt.datetime.now().astimezone()
+    start_local = _to_reference_timezone(start, reference=reference)
+    end_local = _to_reference_timezone(end, reference=reference)
+    if start_local.date() == end_local.date():
+        day_label = _relative_day_label(start_local.date(), reference.date())
+        return (
+            f"{day_label} von {format_spoken_clock(start_local)} "
+            f"bis {format_spoken_clock(end_local)}"
+        )
+    return (
+        f"von {format_calendar_datetime_natural(start_local, now=reference)} "
+        f"bis {format_calendar_datetime_natural(end_local, now=reference)}"
+    )
 
 
 def calendar_window_end(time_range: str) -> dt.datetime:
@@ -119,8 +226,10 @@ def handle_calendar_tool_call(
             parts = []
             for item in top:
                 summary = str(item.get("summary") or "Ohne Titel")
-                start_time = str(item.get("start") or "ohne Zeit")
-                parts.append(f"{summary} um {start_time}")
+                start_text = format_calendar_value_natural(item.get("start"), now=now)
+                if start_text is None:
+                    start_text = str(item.get("start") or "ohne Zeit")
+                parts.append(f"{summary} ({start_text})")
             return "Anstehende Termine: " + "; ".join(parts) + "."
 
         if tool_name == "add_calendar_event":
@@ -145,7 +254,21 @@ def handle_calendar_tool_call(
                 start=start_time,
                 end=end_time,
             )
-            return f"Termin angelegt: {title}. Ereignis-ID: {event_id}."
+            logger.info(
+                "Kalendereintrag erstellt (id=%s, title=%s, start=%s, end=%s)",
+                event_id,
+                title,
+                start_time.isoformat(timespec="minutes"),
+                end_time.isoformat(timespec="minutes"),
+            )
+            window_text = format_calendar_window_natural(
+                start_time,
+                end_time,
+                now=dt.datetime.now().astimezone(),
+            )
+            return (
+                f"Termin angelegt: {title}. Zeit: {window_text}."
+            )
     except Exception as error:
         logger.error("Kalenderaktion fehlgeschlagen (%s): %s", tool_name, error)
         return f"Kalenderaktion fehlgeschlagen: {error}"
