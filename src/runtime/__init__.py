@@ -1,3 +1,5 @@
-from .loop import run_runtime_loop
+"""Runtime engine exports."""
 
-__all__ = ["run_runtime_loop"]
+from .loop import RuntimeEngine
+
+__all__ = ["RuntimeEngine"]

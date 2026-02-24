@@ -1,28 +1,36 @@
 # oracle module
 
-Optional environment-context providers used by `src/main.py` to enrich LLM prompts.
+## Purpose
+Optional environment-context providers used to enrich LLM context and support calendar tools.
 
-## Providers
+## Key files
+- `config.py`: typed oracle configuration model.
+- `providers.py`: provider factory with graceful degradation.
+- `service.py`: cached context aggregation for sensors and calendar.
+- `sensor/`: hardware sensor adapters.
+- `calendar/`: Google Calendar client wrapper.
 
-- `sensor/ens160_sensor.py`: air-quality readings (`aqi`, `tvoc_ppb`, `eco2_ppm`)
-- `sensor/temt6000_sensor.py`: ambient light readings (`illuminance_lux`, etc.) via ADS1115
-- `calendar/google_calendar.py`: upcoming Google Calendar events
+## Configuration
+From `config.toml` (`[oracle]`):
+- `enabled`
+- `ens160_enabled`
+- `temt6000_enabled`
+- `google_calendar_enabled`
+- `google_calendar_max_results`
+- `sensor_cache_ttl_seconds`
+- `calendar_cache_ttl_seconds`
+- `ens160_temperature_compensation_c`
+- `ens160_humidity_compensation_pct`
+- `temt6000_channel`
+- `temt6000_gain`
+- `temt6000_adc_address`
+- `temt6000_busnum`
 
-## Runtime behavior
+Secrets from environment:
+- `ORACLE_GOOGLE_CALENDAR_ID`
+- `ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE`
 
-- Providers are optional and initialized from app config (`config.toml`).
-- Calendar credentials stay in environment variables (secrets).
-- Missing dependencies or unavailable hardware do not crash the app.
-- Failed reads are logged and skipped; cached values are reused when possible.
-
-## Environment variables
-
-- `ORACLE_ENABLED` (`true`/`false`, default `true`)
-- `ORACLE_ENS160_ENABLED` (`true`/`false`, default `false`)
-- `ORACLE_TEMT6000_ENABLED` (`true`/`false`, default `false`)
-- `ORACLE_GOOGLE_CALENDAR_ENABLED` (`true`/`false`, default auto when calendar id + service account are set)
-- `ORACLE_GOOGLE_CALENDAR_ID` (secret; env only)
-- `ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE` (secret path; env only)
-- `ORACLE_GOOGLE_CALENDAR_MAX_RESULTS` (default `5`)
-- `ORACLE_SENSOR_CACHE_TTL_SECONDS` (default `15`)
-- `ORACLE_CALENDAR_CACHE_TTL_SECONDS` (default `60`)
+## Integration notes
+- `OracleContextService` is created only when LLM is enabled in `src/main.py`.
+- Missing dependencies or unavailable hardware are logged and skipped.
+- Calendar and sensor reads are cached by TTL to reduce repeated I/O.

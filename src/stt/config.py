@@ -1,6 +1,8 @@
+"""Configuration models for wake-word and STT components."""
+
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Self
 
 
 class ConfigurationError(Exception):
@@ -9,8 +11,9 @@ class ConfigurationError(Exception):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WakeWordConfig:
+    """Validated wake-word and capture configuration for `WakeWordService`."""
     pico_voice_access_key: str
     porcupine_wake_word_file: str
     porcupine_model_params_file: str
@@ -67,7 +70,7 @@ class WakeWordConfig:
         *,
         pico_voice_access_key: str,
         settings,
-    ) -> "WakeWordConfig":
+    ) -> Self:
         return cls(
             pico_voice_access_key=pico_voice_access_key,
             porcupine_wake_word_file=settings.ppn_file,
@@ -83,17 +86,18 @@ class WakeWordConfig:
             validate_paths=settings.validate_paths,
         )
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class STTConfig:
+    """Speech-to-text model configuration passed to faster-whisper adapters."""
     model_size: str = "base"
     device: str = "cpu"
     compute_type: str = "int8"
-    language: Optional[str] = "en"
+    language: str | None = "en"
     beam_size: int = 5
     vad_filter: bool = True
 
     @classmethod
-    def from_settings(cls, settings) -> "STTConfig":
+    def from_settings(cls, settings) -> Self:
         return cls(
             model_size=settings.model_size,
             device=settings.device,

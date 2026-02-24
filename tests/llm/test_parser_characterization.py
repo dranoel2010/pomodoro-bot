@@ -55,46 +55,6 @@ class ResponseParserCharacterizationTests(unittest.TestCase):
         self.assertEqual("start_timer", tool_call["name"])
         self.assertEqual("15m", tool_call["arguments"]["duration"])
 
-    def test_legacy_timer_start_with_focus_maps_to_pomodoro(self) -> None:
-        parser = ResponseParser()
-        content = json.dumps(
-            {
-                "assistant_text": "",
-                "tool_call": {
-                    "name": "timer_start",
-                    "arguments": {"focus_topic": "Code Review"},
-                },
-            }
-        )
-        result = parser.parse(content, "Starte")
-
-        tool_call = result["tool_call"]
-        self.assertIsNotNone(tool_call)
-        if tool_call is None:
-            self.fail("Expected normalized tool_call")
-        self.assertEqual("start_pomodoro_session", tool_call["name"])
-        self.assertEqual("Code Review", tool_call["arguments"]["focus_topic"])
-
-    def test_legacy_timer_start_ambiguous_defaults_to_pomodoro(self) -> None:
-        parser = ResponseParser()
-        content = json.dumps(
-            {
-                "assistant_text": "",
-                "tool_call": {
-                    "name": "timer_start",
-                    "arguments": {},
-                },
-            }
-        )
-        result = parser.parse(content, "Bitte starte")
-
-        tool_call = result["tool_call"]
-        self.assertIsNotNone(tool_call)
-        if tool_call is None:
-            self.fail("Expected normalized tool_call")
-        self.assertEqual("start_pomodoro_session", tool_call["name"])
-        self.assertEqual("Fokus", tool_call["arguments"]["focus_topic"])
-
     def test_english_assistant_text_replaced_with_german_fallback(self) -> None:
         parser = ResponseParser()
         content = json.dumps(

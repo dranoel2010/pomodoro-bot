@@ -13,8 +13,11 @@ if "runtime" not in sys.modules:
     sys.modules["runtime"] = _pkg
 
 
-def _build_llm_stub():
-    module = types.ModuleType("llm")
+def _build_llm_stub_modules():
+    package = types.ModuleType("llm")
+    package.__path__ = []  # type: ignore[attr-defined]
+    service_module = types.ModuleType("llm.service")
+    types_module = types.ModuleType("llm.types")
 
     class EnvironmentContext:  # pragma: no cover - type placeholder
         pass
@@ -22,13 +25,22 @@ def _build_llm_stub():
     class PomodoroAssistantLLM:  # pragma: no cover - type placeholder
         pass
 
-    module.EnvironmentContext = EnvironmentContext
-    module.PomodoroAssistantLLM = PomodoroAssistantLLM
-    return module
+    types_module.EnvironmentContext = EnvironmentContext
+    service_module.PomodoroAssistantLLM = PomodoroAssistantLLM
+    package.service = service_module
+    package.types = types_module
+    return {
+        "llm": package,
+        "llm.service": service_module,
+        "llm.types": types_module,
+    }
 
 
-def _build_stt_stub():
-    module = types.ModuleType("stt")
+def _build_stt_stub_modules():
+    package = types.ModuleType("stt")
+    package.__path__ = []  # type: ignore[attr-defined]
+    events_module = types.ModuleType("stt.events")
+    stt_module = types.ModuleType("stt.stt")
 
     class STTError(Exception):
         pass
@@ -36,13 +48,26 @@ def _build_stt_stub():
     class FasterWhisperSTT:  # pragma: no cover - type placeholder
         pass
 
-    module.STTError = STTError
-    module.FasterWhisperSTT = FasterWhisperSTT
-    return module
+    class Utterance:  # pragma: no cover - type placeholder
+        pass
+
+    stt_module.STTError = STTError
+    stt_module.FasterWhisperSTT = FasterWhisperSTT
+    events_module.Utterance = Utterance
+    package.stt = stt_module
+    package.events = events_module
+    return {
+        "stt": package,
+        "stt.stt": stt_module,
+        "stt.events": events_module,
+    }
 
 
-def _build_tts_stub():
-    module = types.ModuleType("tts")
+def _build_tts_stub_modules():
+    package = types.ModuleType("tts")
+    package.__path__ = []  # type: ignore[attr-defined]
+    engine_module = types.ModuleType("tts.engine")
+    service_module = types.ModuleType("tts.service")
 
     class TTSError(Exception):
         pass
@@ -50,17 +75,23 @@ def _build_tts_stub():
     class SpeechService:  # pragma: no cover - type placeholder
         pass
 
-    module.TTSError = TTSError
-    module.SpeechService = SpeechService
-    return module
+    engine_module.TTSError = TTSError
+    service_module.SpeechService = SpeechService
+    package.engine = engine_module
+    package.service = service_module
+    return {
+        "tts": package,
+        "tts.engine": engine_module,
+        "tts.service": service_module,
+    }
 
 
 with patch.dict(
     sys.modules,
     {
-        "llm": _build_llm_stub(),
-        "stt": _build_stt_stub(),
-        "tts": _build_tts_stub(),
+        **_build_llm_stub_modules(),
+        **_build_stt_stub_modules(),
+        **_build_tts_stub_modules(),
     },
 ):
     from runtime.utterance import process_utterance
@@ -110,7 +141,7 @@ class UtteranceStateFlowTests(unittest.TestCase):
         idle_calls: list[str] = []
 
         process_utterance(
-            utterance=object(),
+            object(),
             stt=_STTStub(
                 _TranscriptionResultStub(
                     text="stop timer",

@@ -87,6 +87,76 @@ class AppConfigLoadingTests(unittest.TestCase):
             app_config = load_app_config(str(config_path))
             self.assertEqual("jarvis", app_config.ui_server.ui)
 
+    def test_load_app_config_parses_cpu_core_affinity_lists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [stt]
+                    cpu_cores = [0, 1]
+
+                    [tts]
+                    cpu_cores = [2]
+
+                    [llm]
+                    cpu_cores = [3, 4, 5]
+                    """
+                ).strip(),
+            )
+
+            app_config = load_app_config(str(config_path))
+            self.assertEqual((0, 1), app_config.stt.cpu_cores)
+            self.assertEqual((2,), app_config.tts.cpu_cores)
+            self.assertEqual((3, 4, 5), app_config.llm.cpu_cores)
+
+    def test_load_app_config_parses_optional_llm_max_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [llm]
+                    max_tokens = 320
+                    """
+                ).strip(),
+            )
+
+            app_config = load_app_config(str(config_path))
+            self.assertEqual(320, app_config.llm.max_tokens)
+
+    def test_load_app_config_rejects_duplicate_cpu_cores(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [stt]
+                    cpu_cores = [0, 0]
+                    """
+                ).strip(),
+            )
+
+            with self.assertRaises(AppConfigurationError) as context:
+                load_app_config(str(config_path))
+
+            self.assertIn("stt.cpu_cores cannot contain duplicates", str(context.exception))
+
     def test_load_app_config_rejects_unknown_ui_variant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"

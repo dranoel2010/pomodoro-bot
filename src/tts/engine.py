@@ -1,7 +1,9 @@
+"""Piper TTS engine wrapper with model download and synthesis helpers."""
+
 import logging
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from piper.voice import PiperVoice
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -17,10 +19,11 @@ class TTSError(Exception):
 
 
 class PiperTTSEngine:
+    """Loads Piper model assets and synthesizes text into PCM audio."""
     def __init__(
         self,
         config: TTSConfig,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._config = config
         self._logger = logger or logging.getLogger(__name__)
@@ -44,13 +47,36 @@ class PiperTTSEngine:
                 f"Failed to create TTS model directory {model_dir}: {error}"
             ) from error
 
-        if model_file.is_file() and config_file.is_file():
+        if self._is_regular_file(model_file) and self._is_regular_file(config_file):
             return model_file
 
         missing_assets: list[str] = []
-        if not model_file.is_file():
+        if model_file.is_symlink():
+            self._logger.warning(
+                "Replacing symlinked Piper model file with regular file: %s",
+                model_file,
+            )
+            try:
+                model_file.unlink()
+            except OSError as error:
+                raise TTSError(
+                    f"Failed to remove symlinked Piper model file {model_file}: {error}"
+                ) from error
+        if config_file.is_symlink():
+            self._logger.warning(
+                "Replacing symlinked Piper config file with regular file: %s",
+                config_file,
+            )
+            try:
+                config_file.unlink()
+            except OSError as error:
+                raise TTSError(
+                    f"Failed to remove symlinked Piper config file {config_file}: {error}"
+                ) from error
+
+        if not self._is_regular_file(model_file):
             missing_assets.append(model_file.name)
-        if not config_file.is_file():
+        if not self._is_regular_file(config_file):
             missing_assets.append(config_file.name)
 
         repo_id = self._config.hf_repo_id.strip()
@@ -86,6 +112,10 @@ class PiperTTSEngine:
             )
 
         return model_file
+
+    @staticmethod
+    def _is_regular_file(path: Path) -> bool:
+        return path.is_file() and not path.is_symlink()
 
     def _download_and_install_file(
         self,

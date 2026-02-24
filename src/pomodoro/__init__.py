@@ -1,3 +1,5 @@
+"""Public exports for pomodoro session and timer primitives."""
+
 from .service import (
     DEFAULT_POMODORO_SECONDS,
     PomodoroAction,

@@ -1,7 +1,9 @@
+"""ENS160 air-quality sensor adapter."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from ..errors import OracleDependencyError, OracleReadError
 
@@ -15,7 +17,7 @@ class ENS160Sensor:
         *,
         temperature_compensation_c: float = 25.0,
         humidity_compensation_pct: float = 50.0,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._name = name
         self._temperature_compensation_c = float(temperature_compensation_c)

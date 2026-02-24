@@ -1,36 +1,40 @@
+"""Typed payloads shared across LLM backend, parser, and runtime integration."""
+
 from __future__ import annotations
 
 import json
 import datetime as dt
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional, TypedDict
+from typing import Any, Literal, TypedDict
 
-from tool_contract import TOOL_NAME_ORDER
+from contracts.tool_contract import TOOL_NAME_ORDER
 
 ToolName = Literal[*TOOL_NAME_ORDER]
 
 
 class ToolCall(TypedDict):
+    """Typed structure for a single normalized runtime tool invocation."""
     name: ToolName
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
 
 class StructuredResponse(TypedDict):
+    """Typed schema produced by the parser and consumed by runtime."""
     assistant_text: str
-    tool_call: Optional[ToolCall]
+    tool_call: ToolCall | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EnvironmentContext:
     """Read-only factual context passed to the model."""
 
     now_local: str
-    light_level_lux: Optional[float] = None
-    air_quality: Optional[Dict[str, Any]] = None
-    upcoming_events: Optional[list[Dict[str, Any]]] = None
+    light_level_lux: float | None = None
+    air_quality: dict[str, Any] | None = None
+    upcoming_events: list[dict[str, Any]] | None = None
 
-    def to_prompt_placeholders(self) -> Dict[str, str]:
+    def to_prompt_placeholders(self) -> dict[str, str]:
         return {
             "current_time": self._format_current_time(),
             "current_date": self._format_current_date(),
@@ -122,7 +126,7 @@ class EnvironmentContext:
             return f"{int(value)} lux"
         return f"{value:.2f}".rstrip("0").rstrip(".") + " lux"
 
-    def _parse_now_local(self) -> Optional[dt.datetime]:
+    def _parse_now_local(self) -> dt.datetime | None:
         value = self.now_local.strip()
         if not value:
             return None
@@ -154,7 +158,7 @@ class EnvironmentContext:
             return "gestern"
         return f"am {target.day:02d}.{target.month:02d}.{target.year}"
 
-    def _parse_event_datetime(self, value: Any) -> Optional[dt.datetime]:
+    def _parse_event_datetime(self, value: Any) -> dt.datetime | None:
         if not isinstance(value, str):
             return None
         raw = value.strip()
@@ -176,7 +180,7 @@ class EnvironmentContext:
             return False
         return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()))
 
-    def _format_event_point(self, value: Any) -> Optional[str]:
+    def _format_event_point(self, value: Any) -> str | None:
         parsed = self._parse_event_datetime(value)
         if parsed is None:
             return None
@@ -187,7 +191,7 @@ class EnvironmentContext:
             return f"{day_label}, ganztaegig"
         return f"{day_label} um {parsed.strftime('%H:%M')}"
 
-    def _format_event_window(self, start_value: Any, end_value: Any) -> Optional[str]:
+    def _format_event_window(self, start_value: Any, end_value: Any) -> str | None:
         start_point = self._format_event_point(start_value)
         if start_point is None:
             return None

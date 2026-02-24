@@ -1,16 +1,18 @@
+"""High-level speech service that synthesizes and plays assistant replies."""
+
 import logging
-from typing import Optional
 
 from .engine import PiperTTSEngine
 from .output import SoundDeviceAudioOutput
 
 
 class SpeechService:
+    """Combines synthesis and playback into a single speak operation."""
     def __init__(
         self,
         engine: PiperTTSEngine,
         output: SoundDeviceAudioOutput,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._engine = engine
         self._output = output

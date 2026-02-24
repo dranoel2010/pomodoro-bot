@@ -1,3 +1,5 @@
+"""Utilities for serializing UI events and preserving sticky state."""
+
 from __future__ import annotations
 
 import json
@@ -5,25 +7,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-STICKY_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        "state_update",
-        "pomodoro",
-        "timer",
-        "transcript",
-        "assistant_reply",
-        "error",
-    }
-)
-
-STICKY_EVENT_ORDER: tuple[str, ...] = (
-    "pomodoro",
-    "timer",
-    "transcript",
-    "assistant_reply",
-    "error",
-    "state_update",
-)
+from contracts.ui_protocol import STICKY_EVENT_ORDER, STICKY_EVENT_TYPES
 
 
 def make_event(
@@ -32,6 +16,7 @@ def make_event(
     now_fn: Callable[[], datetime] | None = None,
     **payload: Any,
 ) -> str:
+    """Serialize an event payload with type and timestamp for websocket delivery."""
     now = now_fn() if now_fn is not None else datetime.now(timezone.utc)
     return json.dumps(
         {
@@ -43,6 +28,7 @@ def make_event(
 
 
 class StickyEventStore:
+    """Thread-safe cache of sticky events replayed to new websocket clients."""
     def __init__(self):
         self._events: dict[str, str] = {}
         self._lock = threading.Lock()

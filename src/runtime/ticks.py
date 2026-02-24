@@ -1,10 +1,20 @@
+"""Tick handlers that publish timer completion updates and optional TTS output."""
+
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 from pomodoro import PomodoroTick
-from tts import SpeechService, TTSError
+from pomodoro.constants import (
+    ACTION_COMPLETED,
+    ACTION_TICK,
+    REASON_COMPLETED,
+    REASON_TICK,
+)
+from contracts.ui_protocol import EVENT_ASSISTANT_REPLY, STATE_REPLYING
+from tts.engine import TTSError
+from tts.service import SpeechService
 
 from .messages import default_pomodoro_text, default_timer_text
 from .ui import RuntimeUIPublisher
@@ -13,23 +23,23 @@ from .ui import RuntimeUIPublisher
 def handle_pomodoro_tick(
     tick: PomodoroTick,
     *,
-    speech_service: Optional[SpeechService],
+    speech_service: SpeechService | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     publish_idle_state: Callable[[], None],
 ) -> None:
     if tick.completed:
-        completion_message = default_pomodoro_text("completed", tick.snapshot)
+        completion_message = default_pomodoro_text(ACTION_COMPLETED, tick.snapshot)
         ui.publish_pomodoro_update(
             tick.snapshot,
-            action="completed",
+            action=ACTION_COMPLETED,
             accepted=True,
-            reason="completed",
+            reason=REASON_COMPLETED,
             motivation=completion_message,
         )
-        ui.publish_state("replying", message="Pomodoro completed")
-        ui.publish("assistant_reply", text=completion_message)
-        if speech_service:
+        ui.publish_state(STATE_REPLYING, message="Pomodoro completed")
+        ui.publish(EVENT_ASSISTANT_REPLY, text=completion_message)
+        if speech_service is not None:
             try:
                 speech_service.speak(completion_message)
             except TTSError as error:
@@ -39,32 +49,32 @@ def handle_pomodoro_tick(
 
     ui.publish_pomodoro_update(
         tick.snapshot,
-        action="tick",
+        action=ACTION_TICK,
         accepted=True,
-        reason="tick",
+        reason=REASON_TICK,
     )
 
 
 def handle_timer_tick(
     tick: PomodoroTick,
     *,
-    speech_service: Optional[SpeechService],
+    speech_service: SpeechService | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     publish_idle_state: Callable[[], None],
 ) -> None:
     if tick.completed:
-        completion_message = default_timer_text("completed", tick.snapshot)
+        completion_message = default_timer_text(ACTION_COMPLETED, tick.snapshot)
         ui.publish_timer_update(
             tick.snapshot,
-            action="completed",
+            action=ACTION_COMPLETED,
             accepted=True,
-            reason="completed",
+            reason=REASON_COMPLETED,
             message=completion_message,
         )
-        ui.publish_state("replying", message="Timer completed")
-        ui.publish("assistant_reply", text=completion_message)
-        if speech_service:
+        ui.publish_state(STATE_REPLYING, message="Timer completed")
+        ui.publish(EVENT_ASSISTANT_REPLY, text=completion_message)
+        if speech_service is not None:
             try:
                 speech_service.speak(completion_message)
             except TTSError as error:
@@ -74,7 +84,7 @@ def handle_timer_tick(
 
     ui.publish_timer_update(
         tick.snapshot,
-        action="tick",
+        action=ACTION_TICK,
         accepted=True,
-        reason="tick",
+        reason=REASON_TICK,
     )

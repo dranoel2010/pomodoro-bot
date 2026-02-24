@@ -119,4 +119,4 @@ BIN="dist/main"
 cp config.toml dist/config.toml
 cp .env.dist dist/.env
 
-tar -C dist -czvf dist/archive.tar.gz "$(basename "$BIN")" config.toml .env
+tar -C dist -czvf dist/pomodoro-bot-release.tar.gz "$(basename "$BIN")" config.toml .env
