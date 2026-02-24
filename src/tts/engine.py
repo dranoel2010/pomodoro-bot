@@ -159,19 +159,25 @@ class PiperTTSEngine:
     def _install_file(source_path: Path, target_path: Path) -> None:
         temp_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
         try:
-            if temp_path.exists():
+            resolved_source_path = source_path.resolve(strict=True)
+            if not resolved_source_path.is_file():
+                raise TTSError(
+                    f"Resolved Piper asset is not a file: {resolved_source_path}"
+                )
+
+            if temp_path.exists() or temp_path.is_symlink():
                 temp_path.unlink()
 
             try:
-                temp_path.hardlink_to(source_path)
+                temp_path.hardlink_to(resolved_source_path)
             except (OSError, NotImplementedError):
-                shutil.copy2(source_path, temp_path)
+                shutil.copy2(resolved_source_path, temp_path)
 
             if target_path.exists():
                 target_path.unlink()
             temp_path.rename(target_path)
         except OSError as error:
-            if temp_path.exists():
+            if temp_path.exists() or temp_path.is_symlink():
                 try:
                     temp_path.unlink()
                 except OSError:

@@ -95,19 +95,19 @@ def ensure_model_downloaded(
     target_path = models_dir / spec.filename
 
     # Reject symlink placeholders and only trust regular files.
-    if target_path.exists():
-        if target_path.is_symlink():
-            logger.warning(
-                "Existing model path %s is a symlink; replacing it with a regular file",
-                target_path,
-            )
-            try:
-                target_path.unlink()
-            except OSError as e:
-                raise ModelDownloadError(
-                    f"Failed to remove symlinked model file {target_path}: {e}"
-                ) from e
-        elif target_path.is_file():
+    if target_path.is_symlink():
+        logger.warning(
+            "Existing model path %s is a symlink; replacing it with a regular file",
+            target_path,
+        )
+        try:
+            target_path.unlink()
+        except OSError as e:
+            raise ModelDownloadError(
+                f"Failed to remove symlinked model file {target_path}: {e}"
+            ) from e
+    elif target_path.exists():
+        if target_path.is_file():
             try:
                 size = target_path.stat().st_size
                 if size > 0:
@@ -148,6 +148,11 @@ def ensure_model_downloaded(
 
         if not snapshot_path.is_file():
             raise ModelDownloadError(f"Downloaded file does not exist: {snapshot_path}")
+        source_path = snapshot_path.resolve(strict=True)
+        if not source_path.is_file():
+            raise ModelDownloadError(
+                f"Resolved download source is not a file: {source_path}"
+            )
 
     except RepositoryNotFoundError as e:
         raise ModelDownloadError(
@@ -169,9 +174,9 @@ def ensure_model_downloaded(
         ) from e
 
     # Validate GGUF format
-    if validate_gguf and not _validate_gguf_file(snapshot_path, logger):
+    if validate_gguf and not _validate_gguf_file(source_path, logger):
         raise ModelDownloadError(
-            f"Downloaded file {snapshot_path} is not a valid GGUF file"
+            f"Downloaded file {source_path} is not a valid GGUF file"
         )
 
     # Copy to target location atomically
@@ -181,15 +186,15 @@ def ensure_model_downloaded(
 
         try:
             # Try hardlink first (fastest, zero disk usage)
-            if temp_path.exists():
+            if temp_path.exists() or temp_path.is_symlink():
                 temp_path.unlink()
-            temp_path.hardlink_to(snapshot_path)
-            logger.debug(f"Created hardlink to {snapshot_path}")
+            temp_path.hardlink_to(source_path)
+            logger.debug(f"Created hardlink to {source_path}")
         except (OSError, NotImplementedError):
             # Hardlink failed, copy instead
             logger.debug("Hardlink failed, copying file...")
-            shutil.copy2(snapshot_path, temp_path)
-            size = snapshot_path.stat().st_size
+            shutil.copy2(source_path, temp_path)
+            size = source_path.stat().st_size
             logger.debug(f"Copied {size:,} bytes")
 
         # Atomic rename
@@ -202,7 +207,7 @@ def ensure_model_downloaded(
 
     except OSError as e:
         # Cleanup temp file on failure
-        if temp_path.exists():
+        if temp_path.exists() or temp_path.is_symlink():
             try:
                 temp_path.unlink()
             except OSError:
