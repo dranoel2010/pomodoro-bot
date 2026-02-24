@@ -37,6 +37,7 @@ class STTSettings:
     language: Optional[str] = "en"
     beam_size: int = 5
     vad_filter: bool = True
+    cpu_cores: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class TTSSettings:
     hf_revision: str = "main"
     gpu: bool = False
     output_device: Optional[int] = None
+    cpu_cores: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,7 @@ class LLMSettings:
     top_p: float = 0.9
     repeat_penalty: float = 1.1
     verbose: bool = False
+    cpu_cores: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

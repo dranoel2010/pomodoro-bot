@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from contracts.ui_protocol import STATE_IDLE
 
+
 class StartupError(Exception):
     """Raised when runtime startup cannot continue."""
 
@@ -87,11 +88,10 @@ def _initialize_stt(
     try:
         from stt import (
             ConfigurationError,
-            FasterWhisperSTT,
             STTConfig,
-            STTError,
             WakeWordConfig,
         )
+        from runtime.process_workers import ProcessSTTClient
     except Exception as error:
         raise StartupError(f"STT module import error: {error}") from error
 
@@ -105,16 +105,12 @@ def _initialize_stt(
         raise StartupError(f"Configuration error: {error}") from error
 
     try:
-        stt = FasterWhisperSTT(
-            model_size=stt_config.model_size,
-            device=stt_config.device,
-            compute_type=stt_config.compute_type,
-            language=stt_config.language,
-            beam_size=stt_config.beam_size,
-            vad_filter=stt_config.vad_filter,
-            logger=logging.getLogger("stt"),
+        stt = ProcessSTTClient(
+            config=stt_config,
+            cpu_cores=app_config.stt.cpu_cores,
+            logger=logging.getLogger("stt.process"),
         )
-    except STTError as error:
+    except Exception as error:
         raise StartupError(f"STT initialization error: {error}") from error
 
     return wake_word_config, stt
@@ -129,33 +125,21 @@ def _initialize_tts(
         return None
 
     try:
-        from tts import (
-            PiperTTSEngine,
-            SoundDeviceAudioOutput,
-            SpeechService,
-            TTSConfig,
-            TTSConfigurationError,
-            TTSError,
-        )
+        from tts import TTSConfig, TTSConfigurationError
+        from runtime.process_workers import ProcessTTSClient
     except Exception as error:
         raise StartupError(f"TTS module import error: {error}") from error
 
     try:
         tts_config = TTSConfig.from_settings(app_config.tts)
-        tts_engine = PiperTTSEngine(
+        speech_service = ProcessTTSClient(
             config=tts_config,
-            logger=logging.getLogger("tts.engine"),
+            cpu_cores=app_config.tts.cpu_cores,
+            logger=logging.getLogger("tts.process"),
         )
-        tts_output = SoundDeviceAudioOutput(
-            output_device_index=tts_config.output_device_index,
-            logger=logging.getLogger("tts.output"),
-        )
-        speech_service = SpeechService(
-            engine=tts_engine,
-            output=tts_output,
-            logger=logging.getLogger("tts"),
-        )
-    except (TTSConfigurationError, TTSError) as error:
+    except TTSConfigurationError as error:
+        raise StartupError(f"TTS initialization error: {error}") from error
+    except Exception as error:
         raise StartupError(f"TTS initialization error: {error}") from error
 
     logger.info("TTS enabled")
@@ -177,7 +161,8 @@ def _initialize_llm(
         return None
 
     try:
-        from llm import LLMConfig, PomodoroAssistantLLM
+        from llm import LLMConfig
+        from runtime.process_workers import ProcessLLMClient
     except Exception as error:
         raise StartupError(f"LLM module import error: {error}") from error
 
@@ -198,7 +183,11 @@ def _initialize_llm(
             verbose=app_config.llm.verbose,
             logger=logging.getLogger("llm.config"),
         )
-        assistant_llm = PomodoroAssistantLLM(llm_config)
+        assistant_llm = ProcessLLMClient(
+            config=llm_config,
+            cpu_cores=app_config.llm.cpu_cores,
+            logger=logging.getLogger("llm.process"),
+        )
     except Exception as error:
         raise StartupError(f"LLM initialization error: {error}") from error
 
@@ -303,9 +292,31 @@ def _run_runtime(
     return RuntimeEngine(runtime_bootstrap).run()
 
 
+def _close_resource(
+    resource: Optional[Any],
+    *,
+    resource_name: str,
+    logger: logging.Logger,
+) -> None:
+    if resource is None:
+        return
+
+    close_fn = getattr(resource, "close", None)
+    if not callable(close_fn):
+        return
+
+    try:
+        close_fn()
+    except Exception as error:
+        logger.error("Failed to close %s: %s", resource_name, error)
+
+
 def main() -> int:
     """Run the wake-word assistant runtime."""
     logger = setup_logging(level=logging.INFO)
+    stt: Optional[Any] = None
+    speech_service: Optional[Any] = None
+    assistant_llm: Optional[Any] = None
 
     try:
         app_config, secret_config = _load_runtime_config(logger)
@@ -343,6 +354,22 @@ def main() -> int:
     except StartupError as error:
         logger.error("%s", error)
         return 1
+    finally:
+        _close_resource(
+            assistant_llm,
+            resource_name="LLM process client",
+            logger=logger,
+        )
+        _close_resource(
+            speech_service,
+            resource_name="TTS process client",
+            logger=logger,
+        )
+        _close_resource(
+            stt,
+            resource_name="STT process client",
+            logger=logger,
+        )
 
 
 if __name__ == "__main__":

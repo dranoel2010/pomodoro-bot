@@ -17,6 +17,7 @@ Consumes the already-parsed `AppConfig` passed in by `src/main.py`.
 No module-specific environment variables.
 
 ## Integration notes
-- Uses one worker thread for utterance processing to avoid overlapping requests.
+- Uses one orchestration thread for utterance sequencing to avoid overlapping requests.
+- CPU-intensive STT/LLM/TTS work runs in dedicated worker processes.
 - Publishes startup sync state for both timer channels.
 - Continues operating if optional services (oracle/ui/tts/llm) are not available.

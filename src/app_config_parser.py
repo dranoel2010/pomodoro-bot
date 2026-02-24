@@ -101,6 +101,7 @@ def _parse_stt_settings(section: Mapping[str, Any]) -> STTSettings:
         language=_as_optional_str(section.get("language", "en"), "stt.language"),
         beam_size=_as_int(section.get("beam_size", 5), "stt.beam_size"),
         vad_filter=_as_bool(section.get("vad_filter", True), "stt.vad_filter"),
+        cpu_cores=_as_int_tuple(section.get("cpu_cores", ()), "stt.cpu_cores"),
     )
 
 
@@ -126,6 +127,7 @@ def _parse_tts_settings(
             if "output_device" in section
             else None
         ),
+        cpu_cores=_as_int_tuple(section.get("cpu_cores", ()), "tts.cpu_cores"),
     )
 
 
@@ -155,6 +157,7 @@ def _parse_llm_settings(
             "llm.repeat_penalty",
         ),
         verbose=_as_bool(section.get("verbose", False), "llm.verbose"),
+        cpu_cores=_as_int_tuple(section.get("cpu_cores", ()), "llm.cpu_cores"),
     )
 
 
@@ -288,6 +291,31 @@ def _as_int(value: Any, field: str) -> int:
         except ValueError as error:
             raise AppConfigurationError(f"{field} must be an integer.") from error
     raise AppConfigurationError(f"{field} must be an integer.")
+
+
+def _as_int_tuple(value: Any, field: str) -> tuple[int, ...]:
+    if value is None:
+        return ()
+
+    if isinstance(value, tuple):
+        sequence = value
+    elif isinstance(value, list):
+        sequence = tuple(value)
+    else:
+        raise AppConfigurationError(f"{field} must be an array of integers.")
+
+    parsed: list[int] = []
+    seen: set[int] = set()
+    for index, raw in enumerate(sequence):
+        core = _as_int(raw, f"{field}[{index}]")
+        if core < 0:
+            raise AppConfigurationError(f"{field}[{index}] must be >= 0.")
+        if core in seen:
+            raise AppConfigurationError(f"{field} cannot contain duplicates.")
+        seen.add(core)
+        parsed.append(core)
+
+    return tuple(parsed)
 
 
 def _as_float(value: Any, field: str) -> float:

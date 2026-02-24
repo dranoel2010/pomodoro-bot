@@ -112,6 +112,9 @@ The repo includes a default `config.toml` with sections for:
 UI selection settings:
 - `ui_server.ui`: built-in UI variant (`jarvis` or `miro`)
 
+CPU pinning settings:
+- `stt.cpu_cores`, `llm.cpu_cores`, `tts.cpu_cores`: optional integer arrays used to pin dedicated worker processes to specific CPU cores.
+
 Required first edit in `config.toml`:
 - `wake_word.ppn_file`
 - `wake_word.pv_file`

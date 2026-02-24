@@ -17,6 +17,7 @@ From `config.toml` (`[tts]`):
 - `hf_repo_id`
 - `hf_revision`
 - `output_device`
+- `cpu_cores`
 
 ## Integration notes
 - Missing local model assets trigger optional Hugging Face download when `hf_repo_id` is set.

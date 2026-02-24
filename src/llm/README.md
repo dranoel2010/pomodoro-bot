@@ -26,6 +26,7 @@ From `config.toml` (`[llm]`):
 - `top_p`
 - `repeat_penalty`
 - `verbose`
+- `cpu_cores`
 
 Secrets from environment:
 - `HF_TOKEN` (optional for private model access)
