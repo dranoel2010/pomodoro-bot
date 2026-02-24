@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Self
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OracleConfig:
     """Validated oracle runtime configuration assembled from app settings and secrets."""
     enabled: bool
@@ -48,7 +49,7 @@ class OracleConfig:
         *,
         calendar_id: str | None = None,
         calendar_service_account_file: str | None = None,
-    ) -> "OracleConfig":
+    ) -> Self:
         return cls(
             enabled=bool(settings.enabled),
             ens160_enabled=bool(settings.ens160_enabled),

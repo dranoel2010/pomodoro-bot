@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OracleProviders:
     """Container bundling optional provider instances built at startup."""
-    ens160: Optional[object] = None
-    temt6000: Optional[object] = None
-    calendar: Optional[object] = None
+    ens160: object | None = None
+    temt6000: object | None = None
+    calendar: object | None = None

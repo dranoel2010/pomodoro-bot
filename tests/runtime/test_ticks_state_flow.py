@@ -15,8 +15,11 @@ if "runtime" not in sys.modules:
     sys.modules["runtime"] = _pkg
 
 
-def _build_tts_stub():
-    module = types.ModuleType("tts")
+def _build_tts_stub_modules():
+    package = types.ModuleType("tts")
+    package.__path__ = []  # type: ignore[attr-defined]
+    engine_module = types.ModuleType("tts.engine")
+    service_module = types.ModuleType("tts.service")
 
     class TTSError(Exception):
         pass
@@ -24,12 +27,18 @@ def _build_tts_stub():
     class SpeechService:  # pragma: no cover - type placeholder
         pass
 
-    module.TTSError = TTSError
-    module.SpeechService = SpeechService
-    return module
+    engine_module.TTSError = TTSError
+    service_module.SpeechService = SpeechService
+    package.engine = engine_module
+    package.service = service_module
+    return {
+        "tts": package,
+        "tts.engine": engine_module,
+        "tts.service": service_module,
+    }
 
 
-with patch.dict(sys.modules, {"tts": _build_tts_stub()}):
+with patch.dict(sys.modules, _build_tts_stub_modules()):
     from runtime.ticks import handle_pomodoro_tick, handle_timer_tick
 
 

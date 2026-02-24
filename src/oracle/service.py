@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable
 
 from .config import OracleConfig
 from .contracts import OracleProviders
@@ -18,11 +18,11 @@ class OracleContextService:
     def __init__(
         self,
         config: OracleConfig,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
         *,
-        providers: Optional[OracleProviders] = None,
-        monotonic_fn: Optional[Callable[[], float]] = None,
-        now_fn: Optional[Callable[[], datetime]] = None,
+        providers: OracleProviders | None = None,
+        monotonic_fn: Callable[[], float] | None = None,
+        now_fn: Callable[[], datetime] | None = None,
     ):
         self._config = config
         self._logger = logger or logging.getLogger("oracle")
@@ -31,7 +31,7 @@ class OracleContextService:
 
         self._sensor_cache: dict[str, object] = {}
         self._sensor_cache_at: float = 0.0
-        self._calendar_cache: Optional[list[dict[str, object]]] = None
+        self._calendar_cache: list[dict[str, object]] | None = None
         self._calendar_cache_at: float = 0.0
 
         provider_bundle = providers or build_oracle_providers(
@@ -93,7 +93,7 @@ class OracleContextService:
         self._sensor_cache_at = now
         return result
 
-    def _read_calendar_with_cache(self) -> Optional[list[dict[str, object]]]:
+    def _read_calendar_with_cache(self) -> list[dict[str, object]] | None:
         if self._calendar is None:
             return None
 
@@ -119,8 +119,8 @@ class OracleContextService:
     def list_upcoming_events(
         self,
         *,
-        max_results: Optional[int] = None,
-        time_min: Optional[datetime] = None,
+        max_results: int | None = None,
+        time_min: datetime | None = None,
     ) -> list[dict[str, object]]:
         if self._calendar is None:
             raise RuntimeError("Google Calendar integration is not available.")

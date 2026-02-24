@@ -7,7 +7,6 @@ import contextlib
 import logging
 import threading
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlsplit
 
 import websockets
@@ -28,15 +27,15 @@ class UIServer:
     def __init__(
         self,
         config: UIServerConfig,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._config = config
         self._logger = logger or logging.getLogger("ui_server")
-        self._thread: Optional[threading.Thread] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._stop_async: Optional[asyncio.Event] = None
+        self._thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._stop_async: asyncio.Event | None = None
         self._started = threading.Event()
-        self._startup_error: Optional[Exception] = None
+        self._startup_error: Exception | None = None
         self._connected_clients: set[ServerConnection] = set()
         self._sticky_store = StickyEventStore()
         self._index_file = Path(self._config.index_file).resolve()
@@ -99,7 +98,7 @@ class UIServer:
         self._loop = None
         self._stop_async = None
 
-    def publish_state(self, state: str, *, message: Optional[str] = None, **payload) -> None:
+    def publish_state(self, state: str, *, message: str | None = None, **payload) -> None:
         event_payload = {"state": state, **payload}
         if message:
             event_payload["message"] = message

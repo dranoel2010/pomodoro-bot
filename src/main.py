@@ -1,5 +1,3 @@
-"""Application entrypoint that bootstraps services and runs the runtime loop."""
-
 from __future__ import annotations
 
 import logging
@@ -20,20 +18,20 @@ from app_config import (
     load_secret_config,
     resolve_config_path,
 )
-from contracts.closeable_protocol import Closeable
-from contracts.errors import StartupError
-from llm import create_llm_client
-from oracle import create_oracle_service
-from server import create_ui_server
-from stt import create_stt_client
-from tts import create_tts_client
+from contracts import StartupError
+from llm.factory import create_llm_client
+from oracle.factory import create_oracle_service
+from server.factory import create_ui_server
+from stt.factory import create_stt_client
+from tts.factory import create_tts_client
 
 if TYPE_CHECKING:
-    from stt import WakeWordService
+    from stt.service import WakeWordService
+
+type LogQueue = MPQueue[object]
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
-    """Configure logging for the application."""
     logging.basicConfig(
         level=level,
         format="%(asctime)s.%(msecs)03d [%(levelname)s] [%(processName)s:%(process)d] %(name)s: %(message)s",
@@ -45,8 +43,6 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
 
 
 def setup_signal_handlers(service: WakeWordService) -> None:
-    """Set up graceful shutdown on SIGTERM and SIGINT."""
-
     logger = logging.getLogger("wake_word_app")
 
     def signal_handler(signum: int, frame: FrameType | None) -> None:
@@ -63,15 +59,7 @@ def setup_signal_handlers(service: WakeWordService) -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
 
-def _wait_for_service_ready_callback(
-    service: WakeWordService, timeout: float = 10.0
-) -> bool:
-    """RuntimeEngine callback for wake-word startup readiness.
-
-    Returns `False` when startup times out or the service stops before becoming
-    ready. RuntimeEngine handles this return value and aborts startup.
-    """
-
+def _wait_for_service_ready_callback(service: WakeWordService, timeout: float = 10.0) -> bool:
     deadline = time.monotonic() + timeout
     poll_interval_seconds = 0.25
 
@@ -99,7 +87,7 @@ def _load_runtime_config(logger: logging.Logger) -> tuple[AppConfig, SecretConfi
     return app_config, secret_config
 
 
-def _start_log_listener() -> tuple[MPQueue, QueueListener]:
+def _start_log_listener() -> tuple[LogQueue, QueueListener]:
     spawn_context = multiprocessing.get_context("spawn")
     log_queue: MPQueue = spawn_context.Queue()
     handlers = list(logging.getLogger().handlers)
@@ -108,13 +96,19 @@ def _start_log_listener() -> tuple[MPQueue, QueueListener]:
     return log_queue, listener
 
 
-def main() -> int:
-    """Run the wake-word assistant runtime."""
+def _load_runtime_engine():
+    try:
+        from runtime import RuntimeEngine
+    except ImportError as error:
+        raise StartupError(f"Runtime loop import error: {error}")
+    return RuntimeEngine
 
+
+def main() -> int:
     logger = setup_logging(level=logging.INFO)
-    stt_client: Closeable | None = None
-    speech_service: Closeable | None = None
-    assistant_llm: Closeable | None = None
+    stt_client = None
+    speech_service = None
+    assistant_llm = None
     log_listener: QueueListener | None = None
 
     try:
@@ -129,13 +123,7 @@ def main() -> int:
             log_queue=log_queue,
             log_level=log_level,
         )
-
-        speech_service = create_tts_client(
-            tts=app_config.tts,
-            log_queue=log_queue,
-            log_level=log_level,
-        )
-
+        speech_service = create_tts_client(tts=app_config.tts, log_queue=log_queue, log_level=log_level)
         assistant_llm = create_llm_client(
             llm=app_config.llm,
             hf_token=secret_config.hf_token,
@@ -157,17 +145,9 @@ def main() -> int:
                 logger=logger,
             )
 
-        ui_server = create_ui_server(
-            ui=app_config.ui_server,
-            logger=logger,
-        )
+        ui_server = create_ui_server(ui=app_config.ui_server, logger=logger)
 
-        try:
-            from runtime import RuntimeEngine
-        except ImportError as error:
-            raise StartupError(f"Runtime loop import error: {error}")
-
-        return RuntimeEngine(
+        return _load_runtime_engine()(
             logger=logger,
             app_config=app_config,
             wake_word_config=wake_word_config,
@@ -186,17 +166,21 @@ def main() -> int:
         logger.exception("Unhandled startup failure")
         return 1
     finally:
-        for resource, name in (
-            (assistant_llm, "LLM process client"),
-            (speech_service, "TTS process client"),
-            (stt_client, "STT process client"),
-        ):
-            if resource is None:
-                continue
+        if assistant_llm is not None:
             try:
-                resource.close()
+                assistant_llm.close()
             except Exception as error:
-                logger.error("Failed to close %s: %s", name, error)
+                logger.error("Failed to close LLM process client: %s", error)
+        if speech_service is not None:
+            try:
+                speech_service.close()
+            except Exception as error:
+                logger.error("Failed to close TTS process client: %s", error)
+        if stt_client is not None:
+            try:
+                stt_client.close()
+            except Exception as error:
+                logger.error("Failed to close STT process client: %s", error)
         if log_listener is not None:
             log_listener.stop()
 

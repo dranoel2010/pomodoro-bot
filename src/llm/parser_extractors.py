@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import re
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from shared.defaults import DEFAULT_CALENDAR_TIME_RANGE
 
@@ -18,7 +18,7 @@ def sanitize_text(value: Any, *, max_len: int) -> str:
     return text[:max_len].strip()
 
 
-def _resolve_reference_now(now_fn: Optional[Callable[[], datetime]]) -> datetime:
+def _resolve_reference_now(now_fn: Callable[[], datetime] | None) -> datetime:
     reference = now_fn() if now_fn is not None else datetime.now().astimezone()
     if reference.tzinfo is None:
         local_tz = datetime.now().astimezone().tzinfo or timezone.utc
@@ -29,7 +29,7 @@ def _resolve_reference_now(now_fn: Optional[Callable[[], datetime]]) -> datetime
 def _ensure_timezone(
     value: datetime,
     *,
-    now_fn: Optional[Callable[[], datetime]] = None,
+    now_fn: Callable[[], datetime] | None = None,
 ) -> datetime:
     if value.tzinfo is not None:
         return value
@@ -40,8 +40,8 @@ def _ensure_timezone(
 def normalize_calendar_datetime_input(
     value: Any,
     *,
-    now_fn: Optional[Callable[[], datetime]] = None,
-) -> Optional[str]:
+    now_fn: Callable[[], datetime] | None = None,
+) -> str | None:
     if not isinstance(value, str):
         return None
     raw = value.strip()
@@ -107,7 +107,7 @@ def normalize_calendar_datetime_input(
     return None
 
 
-def normalize_duration(value: Any) -> Optional[str]:
+def normalize_duration(value: Any) -> str | None:
     """Normalize duration-like values into compact minute/second/hour tokens."""
     if value is None:
         return None
@@ -143,12 +143,12 @@ def normalize_duration(value: Any) -> Optional[str]:
     return f"{amount}m"
 
 
-def extract_duration_from_prompt(prompt: str) -> Optional[str]:
+def extract_duration_from_prompt(prompt: str) -> str | None:
     """Extract a duration token from free-form prompt text."""
     return normalize_duration(prompt)
 
 
-def extract_focus_topic(prompt: str) -> Optional[str]:
+def extract_focus_topic(prompt: str) -> str | None:
     """Extract a likely pomodoro focus topic from prompt text."""
     quoted = re.search(r"[\"'“”„](.+?)[\"'“”„]", prompt)
     if quoted:
@@ -175,7 +175,7 @@ def sanitize_time_range(value: Any) -> str:
     return text.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
 
 
-def extract_time_range(prompt: str) -> Optional[str]:
+def extract_time_range(prompt: str) -> str | None:
     """Extract relative calendar windows such as today or next week."""
     lowered = prompt.lower()
     if "uebermorgen" in lowered or "übermorgen" in lowered:
@@ -195,7 +195,7 @@ def extract_time_range(prompt: str) -> Optional[str]:
     return None
 
 
-def extract_calendar_title(prompt: str) -> Optional[str]:
+def extract_calendar_title(prompt: str) -> str | None:
     """Extract a likely calendar event title from prompt text."""
     quoted = re.search(r"(?:titel|title)?\s*[\"'“”„](.+?)[\"'“”„]", prompt, re.I)
     if quoted:
@@ -232,8 +232,8 @@ def extract_calendar_title(prompt: str) -> Optional[str]:
 def extract_datetime_literal(
     prompt: str,
     *,
-    now_fn: Optional[Callable[[], datetime]] = None,
-) -> Optional[str]:
+    now_fn: Callable[[], datetime] | None = None,
+) -> str | None:
     """Extract ISO, German, or relative date-time literals from prompt text."""
     iso_match = re.search(
         r"\b(\d{4}-\d{2}-\d{2}[T\s]\d{1,2}:\d{2}(?::\d{2})?)\b",

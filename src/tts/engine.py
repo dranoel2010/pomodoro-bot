@@ -3,7 +3,7 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from piper.voice import PiperVoice
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -23,7 +23,7 @@ class PiperTTSEngine:
     def __init__(
         self,
         config: TTSConfig,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._config = config
         self._logger = logger or logging.getLogger(__name__)

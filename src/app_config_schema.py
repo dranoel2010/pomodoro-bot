@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 DEFAULT_CONFIG_FILE = "config.toml"
 
@@ -34,7 +33,7 @@ class STTSettings:
     model_size: str = "base"
     device: str = "cpu"
     compute_type: str = "int8"
-    language: Optional[str] = "de"
+    language: str | None = "de"
     beam_size: int = 5
     vad_filter: bool = True
     cpu_cores: tuple[int, ...] = ()
@@ -49,7 +48,7 @@ class TTSSettings:
     hf_repo_id: str = ""
     hf_revision: str = "main"
     gpu: bool = False
-    output_device: Optional[int] = None
+    output_device: int | None = None
     cpu_cores: tuple[int, ...] = ()
 
 
@@ -62,7 +61,7 @@ class LLMSettings:
     hf_repo_id: str = ""
     hf_revision: str = ""
     system_prompt: str = ""
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     n_threads: int = 4
     n_ctx: int = 2048
     n_batch: int = 256
@@ -117,6 +116,6 @@ class AppConfig:
 class SecretConfig:
     """Environment-provided secrets kept out of `config.toml`."""
     pico_voice_access_key: str
-    hf_token: Optional[str]
-    oracle_google_calendar_id: Optional[str]
-    oracle_google_service_account_file: Optional[str]
+    hf_token: str | None
+    oracle_google_calendar_id: str | None
+    oracle_google_service_account_file: str | None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from shared.spoken_time import format_spoken_clock
 
@@ -17,7 +17,7 @@ from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_
 
 if TYPE_CHECKING:
     from app_config import AppConfig
-    from oracle import OracleContextService
+    from oracle.service import OracleContextService
 
 
 def parse_duration_seconds(value: object, *, default_seconds: int) -> int:
@@ -43,7 +43,7 @@ def parse_duration_seconds(value: object, *, default_seconds: int) -> int:
     return default_seconds
 
 
-def parse_calendar_datetime(value: object) -> Optional[dt.datetime]:
+def parse_calendar_datetime(value: object) -> dt.datetime | None:
     """Parse ISO or German date-time strings into timezone-aware datetimes."""
     if not isinstance(value, str):
         return None
@@ -131,7 +131,7 @@ def _relative_day_label(target: dt.date, reference: dt.date) -> str:
 def format_calendar_datetime_natural(
     value: dt.datetime,
     *,
-    now: Optional[dt.datetime] = None,
+    now: dt.datetime | None = None,
 ) -> str:
     reference = now or dt.datetime.now().astimezone()
     localized = _to_reference_timezone(value, reference=reference)
@@ -142,8 +142,8 @@ def format_calendar_datetime_natural(
 def format_calendar_value_natural(
     value: object,
     *,
-    now: Optional[dt.datetime] = None,
-) -> Optional[str]:
+    now: dt.datetime | None = None,
+) -> str | None:
     raw = value.strip() if isinstance(value, str) else ""
     reference = now or dt.datetime.now().astimezone()
 
@@ -163,7 +163,7 @@ def format_calendar_window_natural(
     start: dt.datetime,
     end: dt.datetime,
     *,
-    now: Optional[dt.datetime] = None,
+    now: dt.datetime | None = None,
 ) -> str:
     reference = now or dt.datetime.now().astimezone()
     start_local = _to_reference_timezone(start, reference=reference)
@@ -204,7 +204,7 @@ def handle_calendar_tool_call(
     *,
     tool_name: str,
     arguments: dict[str, object],
-    oracle_service: Optional["OracleContextService"],
+    oracle_service: "OracleContextService" | None,
     app_config: "AppConfig",
     logger: logging.Logger,
 ) -> str:

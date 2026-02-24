@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Self
 
 from .model_store import HFModelSpec, ModelDownloadError, ensure_model_downloaded
 
@@ -16,12 +16,12 @@ class ConfigurationError(Exception):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LLMConfig:
     """Configuration for LLM inference."""
 
     model_path: str
-    system_prompt_path: Optional[str] = None
+    system_prompt_path: str | None = None
     max_tokens: int = 256
     n_threads: int = 4
     n_ctx: int = 2048
@@ -93,20 +93,20 @@ class LLMConfig:
         *,
         model_dir: str,
         hf_filename: str,
-        hf_repo_id: Optional[str] = None,
-        hf_revision: Optional[str] = None,
-        hf_token: Optional[str] = None,
-        system_prompt_path: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        n_threads: Optional[int] = None,
-        n_ctx: Optional[int] = None,
-        n_batch: Optional[int] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        repeat_penalty: Optional[float] = None,
-        verbose: Optional[bool] = None,
-        logger: Optional[logging.Logger] = None,
-    ) -> "LLMConfig":
+        hf_repo_id: str | None = None,
+        hf_revision: str | None = None,
+        hf_token: str | None = None,
+        system_prompt_path: str | None = None,
+        max_tokens: int | None = None,
+        n_threads: int | None = None,
+        n_ctx: int | None = None,
+        n_batch: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        repeat_penalty: float | None = None,
+        verbose: bool | None = None,
+        logger: logging.Logger | None = None,
+    ) -> Self:
         logger = logger or logging.getLogger(__name__)
         try:
             model_path = cls._resolve_model_path_from_values(
@@ -147,10 +147,10 @@ class LLMConfig:
         *,
         model_dir: str,
         filename: str,
-        repo_id: Optional[str],
-        revision: Optional[str],
-        hf_token: Optional[str],
-        logger: Optional[logging.Logger] = None,
+        repo_id: str | None,
+        revision: str | None,
+        hf_token: str | None,
+        logger: logging.Logger | None = None,
     ) -> str:
         logger = logger or logging.getLogger(__name__)
 

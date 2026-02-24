@@ -1,24 +1,24 @@
 """Configuration model for Piper-based TTS assets and output selection."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Self
 
 
 class TTSConfigurationError(Exception):
     """Raised when TTS configuration is invalid."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TTSConfig:
     """Resolved Piper model settings and optional output-device selection."""
     model_path: str = ""
     hf_filename: str = ""
     hf_repo_id: str = ""
     hf_revision: str = "main"
-    output_device_index: Optional[int] = None
+    output_device_index: int | None = None
 
     @classmethod
-    def from_settings(cls, settings) -> "TTSConfig":
+    def from_settings(cls, settings) -> Self:
         model_path = (settings.model_path or "").strip()
         hf_filename = (getattr(settings, "hf_filename", "") or "").strip()
         hf_repo_id = (getattr(settings, "hf_repo_id", "") or "").strip()

@@ -2,7 +2,7 @@
 name = "pomodoro-bot"
 version = "0.1.0"
 description = "Voice-driven wake-word + speech-to-text prototype."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
   "Adafruit-ADS1x15>=1.0.2",
   "adafruit-blinka>=8.0.0",
@@ -20,7 +20,6 @@ dependencies = [
   "pyinstaller",
   "sounddevice>=0.5.5",
   "transformers<5",
-  "typing-extensions",
   "websockets>=15.0.1",
 ]
 

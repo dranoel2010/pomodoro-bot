@@ -2,22 +2,44 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
+
+class UIEvent(StrEnum):
+    HELLO = "hello"
+    STATE_UPDATE = "state_update"
+    POMODORO = "pomodoro"
+    TIMER = "timer"
+    TRANSCRIPT = "transcript"
+    ASSISTANT_REPLY = "assistant_reply"
+    ERROR = "error"
+
+
+class AppState(StrEnum):
+    IDLE = "idle"
+    LISTENING = "listening"
+    TRANSCRIBING = "transcribing"
+    THINKING = "thinking"
+    REPLYING = "replying"
+    ERROR = "error"
+
+
 # Websocket event types
-EVENT_HELLO = "hello"
-EVENT_STATE_UPDATE = "state_update"
-EVENT_POMODORO = "pomodoro"
-EVENT_TIMER = "timer"
-EVENT_TRANSCRIPT = "transcript"
-EVENT_ASSISTANT_REPLY = "assistant_reply"
-EVENT_ERROR = "error"
+EVENT_HELLO = UIEvent.HELLO
+EVENT_STATE_UPDATE = UIEvent.STATE_UPDATE
+EVENT_POMODORO = UIEvent.POMODORO
+EVENT_TIMER = UIEvent.TIMER
+EVENT_TRANSCRIPT = UIEvent.TRANSCRIPT
+EVENT_ASSISTANT_REPLY = UIEvent.ASSISTANT_REPLY
+EVENT_ERROR = UIEvent.ERROR
 
 # UI runtime states
-STATE_IDLE = "idle"
-STATE_LISTENING = "listening"
-STATE_TRANSCRIBING = "transcribing"
-STATE_THINKING = "thinking"
-STATE_REPLYING = "replying"
-STATE_ERROR = "error"
+STATE_IDLE = AppState.IDLE
+STATE_LISTENING = AppState.LISTENING
+STATE_TRANSCRIBING = AppState.TRANSCRIBING
+STATE_THINKING = AppState.THINKING
+STATE_REPLYING = AppState.REPLYING
+STATE_ERROR = AppState.ERROR
 
 STICKY_EVENT_TYPES: frozenset[str] = frozenset(
     {

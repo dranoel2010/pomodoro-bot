@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from ..errors import OracleDependencyError, OracleReadError
 
@@ -22,7 +22,7 @@ class TEMT6000Sensor:
         adc_full_scale_volts: float = 4.096,
         resistor_ohms: float = 10_000.0,
         lux_per_microamp: float = 2.0,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         if channel not in (0, 1, 2, 3):
             raise ValueError(f"TEMT6000 channel must be 0..3, got: {channel}")

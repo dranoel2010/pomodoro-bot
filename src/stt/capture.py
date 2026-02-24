@@ -7,7 +7,6 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, auto
-from typing import Optional
 
 from pvrecorder import PvRecorder
 
@@ -46,7 +45,7 @@ class UtteranceCapture:
         max_utterance_seconds: float,
         no_speech_timeout_seconds: float,
         min_speech_seconds: float,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._vad = vad
         self._silence_timeout_seconds = silence_timeout_seconds
@@ -61,7 +60,7 @@ class UtteranceCapture:
         sample_rate: int,
         frame_length: int,
         stop_event: threading.Event,
-    ) -> Optional[Utterance]:
+    ) -> Utterance | None:
         """Capture user utterance after wake word detection.
 
         Uses a state machine to track speech activity and determine when

@@ -6,7 +6,7 @@ import concurrent.futures
 import datetime as dt
 import logging
 from queue import Empty, Queue
-from typing import Callable, Optional
+from typing import Callable
 
 from app_config import AppConfig
 from contracts.ui_protocol import (
@@ -17,23 +17,24 @@ from contracts.ui_protocol import (
     STATE_THINKING,
     STATE_TRANSCRIBING,
 )
-from llm import EnvironmentContext, PomodoroAssistantLLM
-from oracle import OracleContextService
+from llm.service import PomodoroAssistantLLM
+from llm.types import EnvironmentContext
+from oracle.service import OracleContextService
 from pomodoro import PomodoroTimer
 from pomodoro.constants import ACTION_SYNC, REASON_STARTUP
-from server import UIServer
+from server.service import UIServer
 from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS
-from stt import (
-    FasterWhisperSTT,
+from stt.config import WakeWordConfig
+from stt.events import (
     QueueEventPublisher,
     Utterance,
     UtteranceCapturedEvent,
-    WakeWordConfig,
     WakeWordDetectedEvent,
     WakeWordErrorEvent,
-    WakeWordService,
 )
-from tts import SpeechService
+from stt.service import WakeWordService
+from stt.stt import FasterWhisperSTT
+from tts.service import SpeechService
 
 from .ticks import handle_pomodoro_tick, handle_timer_tick
 from .tool_dispatch import RuntimeToolDispatcher
@@ -59,12 +60,16 @@ class RuntimeEngine:
         app_config: AppConfig,
         wake_word_config: WakeWordConfig,
         stt: FasterWhisperSTT,
-        assistant_llm: Optional[PomodoroAssistantLLM] = None,
-        speech_service: Optional[SpeechService] = None,
-        oracle_service: Optional[OracleContextService] = None,
-        ui_server: Optional[UIServer] = None,
-        setup_signal_handlers: Callable[[WakeWordService], None] = _noop_signal_handlers,
-        wait_for_service_ready: Callable[[WakeWordService, float], bool] = _wait_for_service_ready,
+        assistant_llm: PomodoroAssistantLLM | None = None,
+        speech_service: SpeechService | None = None,
+        oracle_service: OracleContextService | None = None,
+        ui_server: UIServer | None = None,
+        setup_signal_handlers: Callable[
+            [WakeWordService], None
+        ] = _noop_signal_handlers,
+        wait_for_service_ready: Callable[
+            [WakeWordService, float], bool
+        ] = _wait_for_service_ready,
     ):
         self._logger = logger
         self._wake_word_config = wake_word_config
@@ -97,8 +102,8 @@ class RuntimeEngine:
             max_workers=1,
             thread_name_prefix="utterance",
         )
-        self._pending_utterance: Optional[concurrent.futures.Future[None]] = None
-        self._wakeword_service: Optional[WakeWordService] = None
+        self._pending_utterance: concurrent.futures.Future[None] | None = None
+        self._wakeword_service: WakeWordService | None = None
 
     def run(self) -> int:
         try:
@@ -117,7 +122,9 @@ class RuntimeEngine:
                     if self._wakeword_is_running():
                         continue
                     self._logger.error("Wake word service stopped unexpectedly")
-                    self._publish_runtime_error("Wake word service stopped unexpectedly")
+                    self._publish_runtime_error(
+                        "Wake word service stopped unexpectedly"
+                    )
                     return 1
 
                 if (event_exit := self._handle_event(event)) is not None:
@@ -143,6 +150,14 @@ class RuntimeEngine:
         light_level_lux = None
         air_quality = None
         upcoming_events = None
+
+        # disable environment context for now
+        return EnvironmentContext(
+            now_local=now_local,
+            light_level_lux=light_level_lux,
+            air_quality=air_quality,
+            upcoming_events=upcoming_events,
+        )
 
         if self._oracle_service is not None:
             try:
@@ -244,7 +259,7 @@ class RuntimeEngine:
                 publish_idle_state=self._publish_idle_state,
             )
 
-    def _poll_event(self) -> Optional[object]:
+    def _poll_event(self) -> object | None:
         try:
             return self._event_queue.get(timeout=0.25)
         except Empty:
@@ -276,7 +291,7 @@ class RuntimeEngine:
             self._publish_idle_state()
             self._pending_utterance = None
 
-    def _handle_event(self, event: object) -> Optional[int]:
+    def _handle_event(self, event: object) -> int | None:
         if isinstance(event, WakeWordDetectedEvent):
             self._logger.info("Wake word detected at %s", event.occurred_at.isoformat())
             self._ui.publish_state(STATE_LISTENING, message="Wake word detected")

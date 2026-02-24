@@ -3,10 +3,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Queue
-from typing import Optional, Protocol
+from typing import Protocol
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Utterance:
     """Captured PCM utterance payload passed from wake-word service to runtime."""
     audio_bytes: bytes
@@ -21,24 +21,24 @@ class Utterance:
         return sample_count / self.sample_rate_hz
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WakeWordDetectedEvent:
     """Event emitted when Porcupine detects the wake word."""
     occurred_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UtteranceCapturedEvent:
     """Event emitted when an utterance has been captured after wake-word detection."""
     utterance: Utterance
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WakeWordErrorEvent:
     """Event emitted when wake-word capture fails unexpectedly."""
     occurred_at: datetime
     message: str
-    exception: Optional[Exception] = None
+    exception: Exception | None = None
 
 
 WakeWordEvent = WakeWordDetectedEvent | UtteranceCapturedEvent | WakeWordErrorEvent

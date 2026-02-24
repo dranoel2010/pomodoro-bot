@@ -7,7 +7,6 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
@@ -19,13 +18,13 @@ class ModelDownloadError(Exception):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HFModelSpec:
     """Specification for a Hugging Face model file."""
 
     repo_id: str
     filename: str
-    revision: Optional[str] = None
+    revision: str | None = None
 
     def __post_init__(self):
         """Validate spec fields."""
@@ -59,8 +58,8 @@ def ensure_model_downloaded(
     spec: HFModelSpec,
     *,
     models_dir: str | Path = "models",
-    hf_token: Optional[str] = None,
-    logger: Optional[logging.Logger] = None,
+    hf_token: str | None = None,
+    logger: logging.Logger | None = None,
     validate_gguf: bool = True,
 ) -> Path:
     """Ensure the exact GGUF model file exists locally and return its path.

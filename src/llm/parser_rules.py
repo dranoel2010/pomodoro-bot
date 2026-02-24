@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from pomodoro.constants import ACTION_CONTINUE, ACTION_PAUSE, ACTION_RESET, ACTION_START
 from contracts.tool_contract import INTENT_STOP
@@ -23,7 +22,7 @@ ACTION_PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 
-def detect_action(prompt: str) -> Optional[str]:
+def detect_action(prompt: str) -> str | None:
     """Detect the latest matching action keyword in the prompt text."""
     matches: list[tuple[int, str]] = []
     for action, pattern in ACTION_PATTERNS.items():

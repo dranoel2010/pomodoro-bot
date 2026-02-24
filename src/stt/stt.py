@@ -3,18 +3,17 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 import numpy as np
 from faster_whisper import WhisperModel
 from .events import Utterance
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TranscriptionResult:
     """Structured transcription payload returned by STT backends."""
     text: str
     language: str
-    confidence: Optional[float] = None
+    confidence: float | None = None
 
 
 class STTError(Exception):
@@ -31,11 +30,11 @@ class FasterWhisperSTT:
         model_size: str = "base",
         device: str = "cpu",
         compute_type: str = "int8",
-        language: Optional[str] = "en",
+        language: str | None = "en",
         beam_size: int = 5,
         vad_filter: bool = True,
-        download_root: Optional[str] = None,
-        logger: Optional[logging.Logger] = None,
+        download_root: str | None = None,
+        logger: logging.Logger | None = None,
     ):
         """Initialize faster-whisper STT.
 
@@ -74,7 +73,7 @@ class FasterWhisperSTT:
             raise STTError(f"Failed to load model: {e}") from e
 
     @staticmethod
-    def _resolve_download_root(download_root: Optional[str]) -> Path:
+    def _resolve_download_root(download_root: str | None) -> Path:
         root = (
             Path(download_root).expanduser()
             if download_root and download_root.strip()
@@ -173,12 +172,12 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
         model_size: str = "base",
         device: str = "cpu",
         compute_type: str = "int8",
-        language: Optional[str] = "en",
+        language: str | None = "en",
         beam_size: int = 5,
         vad_filter: bool = True,
         min_silence_duration_ms: int = 500,
-        download_root: Optional[str] = None,
-        logger: Optional[logging.Logger] = None,
+        download_root: str | None = None,
+        logger: logging.Logger | None = None,
     ):
         """Initialize streaming faster-whisper STT.
 

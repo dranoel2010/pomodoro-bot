@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
-from llm import EnvironmentContext, PomodoroAssistantLLM
-from stt import FasterWhisperSTT, STTError, Utterance
-from tts import SpeechService, TTSError
+from llm.service import PomodoroAssistantLLM
+from llm.types import EnvironmentContext
+from stt.events import Utterance
+from stt.stt import FasterWhisperSTT, STTError
+from tts.engine import TTSError
+from tts.service import SpeechService
 from contracts.ui_protocol import (
     EVENT_ASSISTANT_REPLY,
     EVENT_ERROR,
@@ -26,8 +29,8 @@ def process_utterance(
     utterance: Utterance,
     *,
     stt: FasterWhisperSTT,
-    assistant_llm: Optional[PomodoroAssistantLLM],
-    speech_service: Optional[SpeechService],
+    assistant_llm: PomodoroAssistantLLM | None,
+    speech_service: SpeechService | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     build_llm_environment_context: Callable[[], EnvironmentContext],

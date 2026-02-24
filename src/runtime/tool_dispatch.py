@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
 from pomodoro import PomodoroTimer, remap_timer_tool_for_active_pomodoro
@@ -35,7 +35,7 @@ from .ui import RuntimeUIPublisher
 
 if TYPE_CHECKING:
     from app_config import AppConfig
-    from oracle import OracleContextService
+    from oracle.service import OracleContextService
 
 
 class RuntimeToolDispatcher:
@@ -45,7 +45,7 @@ class RuntimeToolDispatcher:
         *,
         logger: logging.Logger,
         app_config: "AppConfig",
-        oracle_service: Optional["OracleContextService"],
+        oracle_service: "OracleContextService" | None,
         pomodoro_timer: PomodoroTimer,
         countdown_timer: PomodoroTimer,
         ui: RuntimeUIPublisher,

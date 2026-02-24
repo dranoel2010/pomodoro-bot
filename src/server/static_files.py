@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import mimetypes
 from pathlib import Path
-from typing import Optional
 
 
-def resolve_static_file(ui_root: Path, request_path: str) -> Optional[Path]:
+def resolve_static_file(ui_root: Path, request_path: str) -> Path | None:
     """Resolve a safe static file path within the configured UI root."""
     root = ui_root.resolve()
     if not request_path or request_path == "/":

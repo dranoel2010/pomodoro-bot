@@ -9,7 +9,7 @@ _SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from contracts.errors import StartupError
+from contracts import StartupError
 
 # Import tts.factory without executing src/tts/__init__.py.
 _TTS_DIR = Path(__file__).resolve().parents[2] / "src" / "tts"

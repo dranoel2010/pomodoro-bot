@@ -9,7 +9,7 @@ _SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from contracts.errors import StartupError
+from contracts import StartupError
 
 # Import llm.factory without executing src/llm/__init__.py.
 _LLM_DIR = Path(__file__).resolve().parents[2] / "src" / "llm"

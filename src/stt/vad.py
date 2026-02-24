@@ -2,7 +2,6 @@
 
 import logging
 import math
-from typing import Optional
 
 
 class VoiceActivityDetector:
@@ -13,11 +12,11 @@ class VoiceActivityDetector:
         energy_threshold: float,
         adaptive_multiplier: float = 2.0,
         adaptive: bool = True,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._base_threshold = energy_threshold
         self._adaptive = adaptive
-        self._noise_floor: Optional[float] = None
+        self._noise_floor: float | None = None
         self._adaptive_multiplier = adaptive_multiplier
         self._logger = logger or logging.getLogger(__name__)
 

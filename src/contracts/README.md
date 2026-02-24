@@ -6,8 +6,7 @@ Shared constants that define stable contracts between parser, runtime, and UI la
 ## Key files
 - `tool_contract.py`: canonical tool names, intent mappings, and grammar helpers.
 - `ui_protocol.py`: websocket event names and runtime state constants.
-- `closeable_protocol.py`: protocol for startup/shutdown-managed closeable resources.
-- `errors.py`: shared startup error contract (`StartupError`) used by factories.
+- `__init__.py`: shared startup error contract (`StartupError`) used by factories.
 
 ## Configuration
 No direct configuration.

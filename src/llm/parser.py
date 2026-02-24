@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, cast
 
 from shared.defaults import (
     DEFAULT_CALENDAR_TIME_RANGE,
@@ -53,7 +53,7 @@ class ResponseParser:
     """
 
     def __init__(self):
-        self._last_focus_topic: Optional[str] = None
+        self._last_focus_topic: str | None = None
         self._last_time_range: str = DEFAULT_CALENDAR_TIME_RANGE
 
     def parse(self, content: str, user_prompt: str) -> StructuredResponse:
@@ -71,7 +71,7 @@ class ResponseParser:
             "tool_call": inferred,
         }
 
-    def _load_json_object(self, content: str) -> Optional[dict[str, Any]]:
+    def _load_json_object(self, content: str) -> dict[str, Any] | None:
         text = content.strip()
         if not text:
             return None
@@ -97,7 +97,7 @@ class ResponseParser:
 
     def _validate_and_normalize(
         self, obj: dict[str, Any], user_prompt: str
-    ) -> Optional[StructuredResponse]:
+    ) -> StructuredResponse | None:
         assistant_raw = obj.get("assistant_text")
         if isinstance(assistant_raw, str):
             assistant_text = assistant_raw.strip()
@@ -115,7 +115,7 @@ class ResponseParser:
 
     def _normalize_tool_call(
         self, tool_call: Any, user_prompt: str
-    ) -> Optional[ToolCall]:
+    ) -> ToolCall | None:
         if tool_call is None:
             return None
         if not isinstance(tool_call, dict):
@@ -139,7 +139,7 @@ class ResponseParser:
 
         return self._tool_call(normalized_name, normalized_arguments)
 
-    def _resolve_tool_name(self, raw_name: str) -> Optional[str]:
+    def _resolve_tool_name(self, raw_name: str) -> str | None:
         normalized_name = raw_name.strip()
         if normalized_name in TOOL_NAMES:
             return normalized_name
@@ -147,7 +147,7 @@ class ResponseParser:
 
     def _normalize_arguments_for_tool(
         self, tool_name: str, arguments: dict[str, Any], user_prompt: str
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == TOOL_START_TIMER:
             duration = normalize_duration(arguments.get("duration"))
             if duration is None:
@@ -212,7 +212,7 @@ class ResponseParser:
 
         return None
 
-    def _infer_tool_call_from_prompt(self, user_prompt: str) -> Optional[ToolCall]:
+    def _infer_tool_call_from_prompt(self, user_prompt: str) -> ToolCall | None:
         prompt = user_prompt.strip()
         lowered = prompt.lower()
 
@@ -264,7 +264,7 @@ class ResponseParser:
         return None
 
     def _normalize_assistant_text(
-        self, text: str, tool_call: Optional[ToolCall]
+        self, text: str, tool_call: ToolCall | None
     ) -> str:
         return normalize_assistant_text(text, tool_call)
 
@@ -272,15 +272,15 @@ class ResponseParser:
     def _extract_datetime_literal(
         prompt: str,
         *,
-        now_fn: Optional[Callable[[], datetime]] = None,
-    ) -> Optional[str]:
+        now_fn: Callable[[], datetime] | None = None,
+    ) -> str | None:
         effective_now_fn = now_fn or (lambda: datetime.now().astimezone())
         return extract_datetime_literal(
             prompt,
             now_fn=effective_now_fn,
         )
 
-    def _fallback_assistant_text(self, tool_call: Optional[ToolCall]) -> str:
+    def _fallback_assistant_text(self, tool_call: ToolCall | None) -> str:
         return fallback_assistant_text(tool_call)
 
     @staticmethod

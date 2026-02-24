@@ -4,7 +4,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 from uuid import uuid4
 
 from shared.defaults import DEFAULT_TIMER_MINUTES
@@ -31,14 +30,14 @@ class PomodoroAssistantLLM:
         cls,
         model_path: str,
         *,
-        max_tokens: Optional[int] = None,
-        n_threads: Optional[int] = None,
-        n_ctx: Optional[int] = None,
-        n_batch: Optional[int] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        repeat_penalty: Optional[float] = None,
-        verbose: Optional[bool] = None,
+        max_tokens: int | None = None,
+        n_threads: int | None = None,
+        n_ctx: int | None = None,
+        n_batch: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        repeat_penalty: float | None = None,
+        verbose: bool | None = None,
     ) -> "PomodoroAssistantLLM":
         config_kwargs: dict[str, object] = {"model_path": model_path}
         if max_tokens is not None:
@@ -69,7 +68,7 @@ class PomodoroAssistantLLM:
             return self._default_system_message()
 
         attempted = self._candidate_system_prompt_paths(path)
-        last_error: Optional[OSError] = None
+        last_error: OSError | None = None
         for candidate in attempted:
             try:
                 with open(candidate, "r", encoding="utf-8") as file:
@@ -148,9 +147,9 @@ class PomodoroAssistantLLM:
         self,
         user_prompt: str,
         *,
-        env: Optional[EnvironmentContext] = None,
-        extra_context: Optional[str] = None,
-        max_tokens: Optional[int] = None,
+        env: EnvironmentContext | None = None,
+        extra_context: str | None = None,
+        max_tokens: int | None = None,
     ) -> StructuredResponse:
         request_id = uuid4().hex[:8]
         effective_max_tokens = max_tokens if max_tokens is not None else self._config.max_tokens
@@ -248,7 +247,7 @@ class PomodoroAssistantLLM:
         parser = ResponseParser()
         return parser.parse(content, user_prompt_stripped)
 
-    def _render_system_message(self, env: Optional[EnvironmentContext]) -> str:
+    def _render_system_message(self, env: EnvironmentContext | None) -> str:
         content = self._system_prompt_template
         placeholders = self._resolve_environment_placeholders(env)
         for key, value in placeholders.items():
@@ -267,7 +266,7 @@ class PomodoroAssistantLLM:
 
     def _resolve_environment_placeholders(
         self,
-        env: Optional[EnvironmentContext],
+        env: EnvironmentContext | None,
     ) -> dict[str, str]:
         if env is None:
             return self._default_environment_placeholders()

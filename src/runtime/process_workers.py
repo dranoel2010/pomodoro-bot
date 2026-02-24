@@ -1,5 +1,3 @@
-"""ProcessPoolExecutor-backed clients for STT, LLM, and TTS workloads."""
-
 from __future__ import annotations
 
 import concurrent.futures
@@ -8,17 +6,20 @@ import multiprocessing
 import os
 from dataclasses import replace
 from logging.handlers import QueueHandler
-from typing import TYPE_CHECKING, Callable, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from llm import EnvironmentContext, LLMConfig, StructuredResponse
-    from stt import STTConfig, TranscriptionResult, Utterance
-    from tts import TTSConfig
+    from llm.config import LLMConfig
+    from llm.types import EnvironmentContext, StructuredResponse
+    from stt.config import STTConfig
+    from stt.events import Utterance
+    from stt.stt import TranscriptionResult
+    from tts.config import TTSConfig
 
 
 def _configure_worker_logging(
     *,
-    log_queue: Optional[multiprocessing.Queue[object]],
+    log_queue: multiprocessing.Queue[object] | None,
     log_level: int,
 ) -> None:
     if log_queue is None:
@@ -84,34 +85,15 @@ def _worker_ping() -> None:
     return None
 
 
-class _STTBackend(Protocol):
-    def transcribe(self, utterance: object) -> object: ...
-
-
-class _LLMBackend(Protocol):
-    def run(
-        self,
-        user_prompt: str,
-        *,
-        env: object | None = None,
-        extra_context: str | None = None,
-        max_tokens: Optional[int] = None,
-    ) -> object: ...
-
-
-class _TTSBackend(Protocol):
-    def speak(self, text: str) -> None: ...
-
-
-_STT_INSTANCE: Optional[_STTBackend] = None
-_LLM_INSTANCE: Optional[_LLMBackend] = None
-_TTS_INSTANCE: Optional[_TTSBackend] = None
+_STT_INSTANCE: Any = None
+_LLM_INSTANCE: Any = None
+_TTS_INSTANCE: Any = None
 
 
 def _init_stt_worker(
     config: "STTConfig",
     cpu_cores: tuple[int, ...],
-    log_queue: Optional[multiprocessing.Queue[object]],
+    log_queue: multiprocessing.Queue[object] | None,
     log_level: int,
 ) -> None:
     global _STT_INSTANCE
@@ -120,7 +102,7 @@ def _init_stt_worker(
     logger = logging.getLogger("stt.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 
-    from stt import FasterWhisperSTT
+    from stt.stt import FasterWhisperSTT
 
     _STT_INSTANCE = FasterWhisperSTT(
         model_size=config.model_size,
@@ -142,7 +124,7 @@ def _stt_task(utterance: object) -> object:
 def _init_llm_worker(
     config: "LLMConfig",
     cpu_cores: tuple[int, ...],
-    log_queue: Optional[multiprocessing.Queue[object]],
+    log_queue: multiprocessing.Queue[object] | None,
     log_level: int,
 ) -> None:
     global _LLM_INSTANCE
@@ -151,7 +133,7 @@ def _init_llm_worker(
     logger = logging.getLogger("llm.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 
-    from llm import PomodoroAssistantLLM
+    from llm.service import PomodoroAssistantLLM
 
     _LLM_INSTANCE = PomodoroAssistantLLM(config)
 
@@ -183,7 +165,7 @@ def _llm_task(payload: dict[str, object]) -> object:
 def _init_tts_worker(
     config: "TTSConfig",
     cpu_cores: tuple[int, ...],
-    log_queue: Optional[multiprocessing.Queue[object]],
+    log_queue: multiprocessing.Queue[object] | None,
     log_level: int,
 ) -> None:
     global _TTS_INSTANCE
@@ -192,7 +174,9 @@ def _init_tts_worker(
     logger = logging.getLogger("tts.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 
-    from tts import PiperTTSEngine, SoundDeviceAudioOutput, SpeechService
+    from tts.engine import PiperTTSEngine
+    from tts.output import SoundDeviceAudioOutput
+    from tts.service import SpeechService
 
     _TTS_INSTANCE = SpeechService(
         engine=PiperTTSEngine(config=config, logger=logger.getChild("engine")),
@@ -285,15 +269,13 @@ def _llm_config_for_worker(
 
 
 class ProcessSTTClient:
-    """Process-backed STT client compatible with `FasterWhisperSTT.transcribe`."""
-
     def __init__(
         self,
         *,
         config: "STTConfig",
         cpu_cores: tuple[int, ...] = (),
-        logger: Optional[logging.Logger] = None,
-        log_queue: Optional[multiprocessing.Queue[object]] = None,
+        logger: logging.Logger | None = None,
+        log_queue: multiprocessing.Queue[object] | None = None,
         log_level: int = logging.INFO,
     ):
         worker_logger = logger or logging.getLogger("stt.process")
@@ -306,7 +288,7 @@ class ProcessSTTClient:
         )
 
     def transcribe(self, utterance: "Utterance") -> "TranscriptionResult":
-        from stt import STTError
+        from stt.stt import STTError
 
         try:
             return self._worker.call(utterance)
@@ -318,15 +300,13 @@ class ProcessSTTClient:
 
 
 class ProcessLLMClient:
-    """Process-backed LLM client compatible with `PomodoroAssistantLLM.run`."""
-
     def __init__(
         self,
         *,
         config: "LLMConfig",
         cpu_cores: tuple[int, ...] = (),
-        logger: Optional[logging.Logger] = None,
-        log_queue: Optional[multiprocessing.Queue[object]] = None,
+        logger: logging.Logger | None = None,
+        log_queue: multiprocessing.Queue[object] | None = None,
         log_level: int = logging.INFO,
     ):
         worker_logger = logger or logging.getLogger("llm.process")
@@ -345,9 +325,9 @@ class ProcessLLMClient:
         self,
         user_prompt: str,
         *,
-        env: Optional["EnvironmentContext"] = None,
-        extra_context: Optional[str] = None,
-        max_tokens: Optional[int] = None,
+        env: "EnvironmentContext" | None = None,
+        extra_context: str | None = None,
+        max_tokens: int | None = None,
     ) -> "StructuredResponse":
         payload: dict[str, object] = {
             "user_prompt": user_prompt,
@@ -362,15 +342,13 @@ class ProcessLLMClient:
 
 
 class ProcessTTSClient:
-    """Process-backed TTS client compatible with `SpeechService.speak`."""
-
     def __init__(
         self,
         *,
         config: "TTSConfig",
         cpu_cores: tuple[int, ...] = (),
-        logger: Optional[logging.Logger] = None,
-        log_queue: Optional[multiprocessing.Queue[object]] = None,
+        logger: logging.Logger | None = None,
+        log_queue: multiprocessing.Queue[object] | None = None,
         log_level: int = logging.INFO,
     ):
         worker_logger = logger or logging.getLogger("tts.process")
@@ -383,7 +361,7 @@ class ProcessTTSClient:
         )
 
     def speak(self, text: str) -> None:
-        from tts import TTSError
+        from tts.engine import TTSError
 
         try:
             self._worker.call(text)

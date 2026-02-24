@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Protocol
+from typing import Protocol
 
 from pomodoro import PomodoroSnapshot
 from contracts.ui_protocol import EVENT_POMODORO, EVENT_TIMER
@@ -16,7 +16,7 @@ class UISink(Protocol):
         self,
         state: str,
         *,
-        message: Optional[str] = None,
+        message: str | None = None,
         **payload: object,
     ) -> None:
         ...
@@ -25,7 +25,7 @@ class UISink(Protocol):
 class RuntimeUIPublisher:
     """Safe facade that emits runtime updates when a UI server is available."""
 
-    def __init__(self, ui_server: Optional[UISink]):
+    def __init__(self, ui_server: UISink | None):
         self._ui_server = ui_server
 
     def publish(self, event_type: str, **payload: object) -> None:
@@ -36,7 +36,7 @@ class RuntimeUIPublisher:
         self,
         state: str,
         *,
-        message: Optional[str] = None,
+        message: str | None = None,
         **payload: object,
     ) -> None:
         if self._ui_server:
@@ -47,10 +47,10 @@ class RuntimeUIPublisher:
         snapshot: PomodoroSnapshot,
         *,
         action: str,
-        accepted: Optional[bool] = None,
+        accepted: bool | None = None,
         reason: str = "",
-        tool_name: Optional[str] = None,
-        motivation: Optional[str] = None,
+        tool_name: str | None = None,
+        motivation: str | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "action": action,
@@ -74,10 +74,10 @@ class RuntimeUIPublisher:
         snapshot: PomodoroSnapshot,
         *,
         action: str,
-        accepted: Optional[bool] = None,
+        accepted: bool | None = None,
         reason: str = "",
-        tool_name: Optional[str] = None,
-        message: Optional[str] = None,
+        tool_name: str | None = None,
+        message: str | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "action": action,

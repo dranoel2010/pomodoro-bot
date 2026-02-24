@@ -4,7 +4,6 @@ import logging
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Optional
 
 import pvporcupine
 from pvrecorder import PvRecorder
@@ -27,12 +26,12 @@ class WakeWordService:
         self,
         config: WakeWordConfig,
         publisher: EventPublisher,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._config = config
         self._publisher = publisher
         self._logger = logger or logging.getLogger(__name__)
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._ready_event = threading.Event()
         self._running_lock = threading.Lock()
@@ -65,7 +64,7 @@ class WakeWordService:
         """Check if the service is ready to detect wake words."""
         return self._ready_event.is_set()
 
-    def wait_until_ready(self, timeout: Optional[float] = None) -> bool:
+    def wait_until_ready(self, timeout: float | None = None) -> bool:
         """Wait until the service is ready to detect wake words.
 
         Args:

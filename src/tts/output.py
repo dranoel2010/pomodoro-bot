@@ -1,7 +1,6 @@
 """Sounddevice-backed audio playback for synthesized speech."""
 
 import logging
-from typing import Optional
 
 import numpy as np
 import sounddevice as sd
@@ -13,9 +12,9 @@ class SoundDeviceAudioOutput:
     """Plays mono PCM arrays through a selected sounddevice output."""
     def __init__(
         self,
-        output_device_index: Optional[int] = None,
+        output_device_index: int | None = None,
         blocksize: int = 2048,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         self._output_device_index = output_device_index
         self._blocksize = blocksize

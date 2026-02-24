@@ -1,7 +1,7 @@
 """llama.cpp backend wrapper with constrained JSON grammar output."""
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from contracts.tool_contract import tool_name_gbnf_alternatives
 
@@ -32,14 +32,14 @@ ws ::= ([ \t\n\r])*
 
 @dataclass(frozen=True, slots=True)
 class CompletionUsage:
-    finish_reason: Optional[str]
-    prompt_tokens: Optional[int]
-    completion_tokens: Optional[int]
-    total_tokens: Optional[int]
-    derived_completion_tokens: Optional[int]
-    accounting_consistent: Optional[bool]
-    accounting_delta: Optional[int]
-    raw_usage: Optional[dict[str, object]]
+    finish_reason: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    derived_completion_tokens: int | None
+    accounting_consistent: bool | None
+    accounting_delta: int | None
+    raw_usage: dict[str, object] | None
 
 
 def build_gbnf_schema() -> str:
@@ -64,11 +64,11 @@ class LlamaBackend:
         )
         self._grammar = LlamaGrammar.from_string(build_gbnf_schema())
         self._config = config
-        self._last_finish_reason: Optional[str] = None
-        self._last_prompt_tokens: Optional[int] = None
-        self._last_completion_tokens: Optional[int] = None
-        self._last_total_tokens: Optional[int] = None
-        self._last_usage: Optional[CompletionUsage] = None
+        self._last_finish_reason: str | None = None
+        self._last_prompt_tokens: int | None = None
+        self._last_completion_tokens: int | None = None
+        self._last_total_tokens: int | None = None
+        self._last_usage: CompletionUsage | None = None
 
     def complete(self, messages: list[dict[str, str]], max_tokens: int) -> str:
         response: dict[str, Any] = self._llm.create_chat_completion(
@@ -115,43 +115,43 @@ class LlamaBackend:
         return choice["message"]["content"]
 
     @property
-    def last_finish_reason(self) -> Optional[str]:
+    def last_finish_reason(self) -> str | None:
         return self._last_finish_reason
 
     @property
-    def last_prompt_tokens(self) -> Optional[int]:
+    def last_prompt_tokens(self) -> int | None:
         return self._last_prompt_tokens
 
     @property
-    def last_completion_tokens(self) -> Optional[int]:
+    def last_completion_tokens(self) -> int | None:
         return self._last_completion_tokens
 
     @property
-    def last_total_tokens(self) -> Optional[int]:
+    def last_total_tokens(self) -> int | None:
         return self._last_total_tokens
 
     @property
-    def last_usage(self) -> Optional[CompletionUsage]:
+    def last_usage(self) -> CompletionUsage | None:
         return self._last_usage
 
 
 def _build_completion_usage(
     *,
-    finish_reason: Optional[str],
-    prompt_tokens: Optional[int],
-    completion_tokens: Optional[int],
-    total_tokens: Optional[int],
-    raw_usage: Optional[dict[str, object]],
+    finish_reason: str | None,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    total_tokens: int | None,
+    raw_usage: dict[str, object] | None,
 ) -> CompletionUsage:
-    derived_completion_tokens: Optional[int] = None
+    derived_completion_tokens: int | None = None
     if (
         isinstance(total_tokens, int)
         and isinstance(prompt_tokens, int)
     ):
         derived_completion_tokens = total_tokens - prompt_tokens
 
-    accounting_consistent: Optional[bool] = None
-    accounting_delta: Optional[int] = None
+    accounting_consistent: bool | None = None
+    accounting_delta: int | None = None
     if (
         isinstance(total_tokens, int)
         and isinstance(prompt_tokens, int)
@@ -172,7 +172,7 @@ def _build_completion_usage(
     )
 
 
-def _as_int(value: Any) -> Optional[int]:
+def _as_int(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):

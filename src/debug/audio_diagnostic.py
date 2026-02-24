@@ -9,7 +9,7 @@ import pvporcupine
 from pvrecorder import PvRecorder
 
 from app_config import AppConfigurationError, load_app_config, load_secret_config, resolve_config_path
-from stt import WakeWordConfig, ConfigurationError
+from stt.config import ConfigurationError, WakeWordConfig
 
 
 def setup_logging():

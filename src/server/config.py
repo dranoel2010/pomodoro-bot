@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 
 class ServerConfigurationError(Exception):
@@ -30,7 +31,7 @@ def _default_index_file(ui: str) -> Path:
     return base_dir / relative_path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UIServerConfig:
     """Validated UI server configuration derived from app settings."""
     enabled: bool = True
@@ -69,7 +70,7 @@ class UIServerConfig:
         return WEBSOCKET_PATH
 
     @classmethod
-    def from_settings(cls, settings) -> "UIServerConfig":
+    def from_settings(cls, settings) -> Self:
         raw_ui = getattr(settings, "ui", "jarvis")
         ui = raw_ui.strip().lower() if raw_ui else "jarvis"
         index_file = settings.index_file.strip() if settings.index_file else ""

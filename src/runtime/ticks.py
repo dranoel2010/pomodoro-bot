@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 from pomodoro import PomodoroTick
 from pomodoro.constants import (
@@ -12,8 +12,9 @@ from pomodoro.constants import (
     REASON_COMPLETED,
     REASON_TICK,
 )
-from tts import SpeechService, TTSError
 from contracts.ui_protocol import EVENT_ASSISTANT_REPLY, STATE_REPLYING
+from tts.engine import TTSError
+from tts.service import SpeechService
 
 from .messages import default_pomodoro_text, default_timer_text
 from .ui import RuntimeUIPublisher
@@ -22,7 +23,7 @@ from .ui import RuntimeUIPublisher
 def handle_pomodoro_tick(
     tick: PomodoroTick,
     *,
-    speech_service: Optional[SpeechService],
+    speech_service: SpeechService | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     publish_idle_state: Callable[[], None],
@@ -57,7 +58,7 @@ def handle_pomodoro_tick(
 def handle_timer_tick(
     tick: PomodoroTick,
     *,
-    speech_service: Optional[SpeechService],
+    speech_service: SpeechService | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     publish_idle_state: Callable[[], None],

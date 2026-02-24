@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from shared.defaults import DEFAULT_FOCUS_TOPIC_DE, DEFAULT_TIMER_MINUTES
 from contracts.tool_contract import (
@@ -24,12 +23,15 @@ from contracts.tool_contract import (
 from .types import ToolCall
 
 
-def normalize_assistant_text(text: str, tool_call: Optional[ToolCall]) -> str:
+def normalize_assistant_text(text: str, tool_call: ToolCall | None) -> str:
     """Normalize assistant text and replace weak replies with deterministic fallbacks."""
     normalized = re.sub(r"\s+", " ", text).strip()
     if not normalized:
         return fallback_assistant_text(tool_call)
-    if normalized.lower() in {"ok", "okay", "klar", "verstanden"} and tool_call is not None:
+    if (
+        normalized.lower() in {"ok", "okay", "klar", "verstanden"}
+        and tool_call is not None
+    ):
         return fallback_assistant_text(tool_call)
     if is_probably_english(normalized):
         return fallback_assistant_text(tool_call)
@@ -58,10 +60,10 @@ def is_probably_english(text: str) -> bool:
     return english_hits >= 2 and english_hits >= (german_hits + 1) and not has_umlaut
 
 
-def fallback_assistant_text(tool_call: Optional[ToolCall]) -> str:
+def fallback_assistant_text(tool_call: ToolCall | None) -> str:
     """Return deterministic German fallback text based on the inferred tool call."""
     if tool_call is None:
-        return "Bitte formuliere die Anfrage auf Deutsch und etwas genauer."
+        return "Entschuldigung, das habe ich glaube ich nicht verstanden."
 
     name = tool_call["name"]
     if name == TOOL_START_TIMER:

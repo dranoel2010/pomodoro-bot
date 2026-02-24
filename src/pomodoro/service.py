@@ -7,7 +7,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 from .constants import (
     ACTION_ABORT,
@@ -43,7 +43,7 @@ PomodoroAction = Literal["start", "pause", "continue", "abort", "reset"]
 class PomodoroSnapshot:
     """Immutable timer snapshot exposed to runtime and UI publishers."""
     phase: PomodoroPhase
-    session: Optional[str]
+    session: str | None
     duration_seconds: int
     remaining_seconds: int
 
@@ -70,7 +70,7 @@ class PomodoroTimer:
         self,
         *,
         duration_seconds: int = DEFAULT_POMODORO_SECONDS,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         if duration_seconds <= 0:
             raise ValueError("duration_seconds must be greater than zero")
@@ -80,12 +80,12 @@ class PomodoroTimer:
         self._lock = threading.Lock()
 
         self._phase: PomodoroPhase = PHASE_IDLE
-        self._session: Optional[str] = None
-        self._started_at_monotonic: Optional[float] = None
-        self._paused_at_monotonic: Optional[float] = None
+        self._session: str | None = None
+        self._started_at_monotonic: float | None = None
+        self._paused_at_monotonic: float | None = None
         self._paused_total_seconds: float = 0.0
         self._terminal_remaining_seconds: int = self._duration_seconds
-        self._last_emitted_remaining: Optional[int] = None
+        self._last_emitted_remaining: int | None = None
 
     def snapshot(self) -> PomodoroSnapshot:
         with self._lock:
@@ -95,8 +95,8 @@ class PomodoroTimer:
         self,
         action: PomodoroAction,
         *,
-        session: Optional[str] = None,
-        duration_seconds: Optional[int] = None,
+        session: str | None = None,
+        duration_seconds: int | None = None,
     ) -> PomodoroActionResult:
         with self._lock:
             now = time.monotonic()
@@ -164,7 +164,7 @@ class PomodoroTimer:
 
             return self._result_locked(action, False, REASON_UNSUPPORTED_ACTION, now)
 
-    def poll(self) -> Optional[PomodoroTick]:
+    def poll(self) -> PomodoroTick | None:
         """Return tick updates while running (max once per second + completion)."""
         with self._lock:
             if self._phase != PHASE_RUNNING:
@@ -189,8 +189,8 @@ class PomodoroTimer:
         self,
         now: float,
         *,
-        session: Optional[str],
-        duration_seconds: Optional[int] = None,
+        session: str | None,
+        duration_seconds: int | None = None,
     ) -> None:
         if duration_seconds is not None and int(duration_seconds) > 0:
             self._duration_seconds = int(duration_seconds)

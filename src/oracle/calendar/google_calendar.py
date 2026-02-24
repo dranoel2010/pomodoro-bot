@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..errors import (
     OracleConfigurationError,
@@ -25,7 +25,7 @@ class GoogleCalendar:
         calendar_id: str,
         service_account_file: str,
         read_only: bool = True,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         if not calendar_id.strip():
             raise OracleConfigurationError("calendar_id cannot be empty")
@@ -68,8 +68,8 @@ class GoogleCalendar:
         self,
         *,
         max_results: int = 10,
-        time_min: Optional[dt.datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        time_min: dt.datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Fetch upcoming events and return normalized fields."""
         if max_results < 1:
             raise ValueError(f"max_results must be >= 1, got: {max_results}")
@@ -106,9 +106,9 @@ class GoogleCalendar:
         start: dt.datetime,
         end: dt.datetime,
         *,
-        description: Optional[str] = None,
-        location: Optional[str] = None,
-        timezone: Optional[str] = None,
+        description: str | None = None,
+        location: str | None = None,
+        timezone: str | None = None,
     ) -> str:
         self._ensure_write_enabled()
         if start.tzinfo is None or end.tzinfo is None:
@@ -117,7 +117,7 @@ class GoogleCalendar:
             raise ValueError("Event end must be after start.")
 
         timezone_name = timezone or self._timezone_name(start)
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "summary": summary,
             "start": {"dateTime": start.isoformat()},
             "end": {"dateTime": end.isoformat()},
@@ -164,13 +164,13 @@ class GoogleCalendar:
         self,
         event_id: str,
         *,
-        summary: Optional[str] = None,
-        start: Optional[dt.datetime] = None,
-        end: Optional[dt.datetime] = None,
-        description: Optional[str] = None,
-        location: Optional[str] = None,
-        timezone: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        summary: str | None = None,
+        start: dt.datetime | None = None,
+        end: dt.datetime | None = None,
+        description: str | None = None,
+        location: str | None = None,
+        timezone: str | None = None,
+    ) -> dict[str, Any]:
         self._ensure_write_enabled()
         if not event_id.strip():
             raise ValueError("event_id cannot be empty")
@@ -219,7 +219,7 @@ class GoogleCalendar:
             ) from error
 
     @staticmethod
-    def _normalize_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_event(event: dict[str, Any]) -> dict[str, Any]:
         start = (event.get("start") or {}).get("dateTime") or (
             event.get("start") or {}
         ).get("date")
@@ -241,7 +241,7 @@ class GoogleCalendar:
             )
 
     @staticmethod
-    def _timezone_name(value: dt.datetime) -> Optional[str]:
+    def _timezone_name(value: dt.datetime) -> str | None:
         tzinfo = value.tzinfo
         if tzinfo is None:
             return None
