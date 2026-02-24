@@ -18,6 +18,7 @@ from .types import EnvironmentContext, StructuredResponse
 
 class PomodoroAssistantLLM:
     """End-to-end assistant wrapper that renders prompts and parses structured replies."""
+
     def __init__(self, config: LLMConfig):
         self._logger = logging.getLogger(__name__)
         self._config = config
@@ -155,6 +156,19 @@ class PomodoroAssistantLLM:
 
         messages.append({"role": "user", "content": user_prompt.strip()})
         content = self._backend.complete(messages, max_tokens=max_tokens)
+        finish_reason = getattr(self._backend, "last_finish_reason", None)
+        prompt_tokens = getattr(self._backend, "last_prompt_tokens", None)
+        completion_tokens = getattr(self._backend, "last_completion_tokens", None)
+        consumed_tokens = getattr(self._backend, "last_total_tokens", None)
+        self._logger.info(
+            "LLM completion metadata: finish_reason=%s max_tokens=%d content_chars=%d consumed_tokens=%s prompt_tokens=%s completion_tokens=%s",
+            finish_reason,
+            max_tokens,
+            len(content),
+            consumed_tokens,
+            prompt_tokens,
+            completion_tokens,
+        )
         self._logger.info(content)
         # Use a short-lived parser instance per request to avoid cross-request
         # mutable state coupling inside the service lifecycle.

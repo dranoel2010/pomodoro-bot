@@ -1,7 +1,6 @@
 """Configuration model for Piper-based TTS assets and output selection."""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 
@@ -28,12 +27,7 @@ class TTSConfig:
         if not model_path:
             raise TTSConfigurationError("TTS model_path cannot be empty")
         if not hf_filename:
-            # Backward-compatible fallback: allow model_path to directly reference .onnx.
-            model_path_file = Path(model_path)
-            if model_path_file.suffix.lower() != ".onnx":
-                raise TTSConfigurationError("TTS hf_filename cannot be empty")
-            hf_filename = model_path_file.name
-            model_path = str(model_path_file.parent)
+            raise TTSConfigurationError("TTS hf_filename cannot be empty")
 
         return cls(
             model_path=model_path,

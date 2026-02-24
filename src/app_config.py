@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tomllib
 from pathlib import Path
 from typing import Mapping
 
@@ -28,12 +29,6 @@ from app_config_schema import (
     UIServerSettings,
     WakeWordSettings,
 )
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes
-    import tomli as tomllib  # type: ignore
-
 
 def resolve_config_path(config_path: str | None = None) -> Path:
     """Resolve the config file path from argument, environment, or default location."""

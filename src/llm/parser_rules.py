@@ -1,34 +1,12 @@
-"""Intent-detection rules and legacy alias mappings for tool calls."""
+"""Intent-detection rules for tool calls."""
 
 from __future__ import annotations
 
 import re
 from typing import Optional
 
-from pomodoro.constants import (
-    ACTION_CONTINUE,
-    ACTION_PAUSE,
-    ACTION_RESET,
-    ACTION_START,
-)
+from pomodoro.constants import ACTION_CONTINUE, ACTION_PAUSE, ACTION_RESET, ACTION_START
 from contracts.tool_contract import INTENT_STOP
-
-# Backward-compat aliases emitted by older prompts.
-LEGACY_TOOL_TIMER_START = "timer_start"
-LEGACY_TOOL_TIMER_PAUSE = "timer_pause"
-LEGACY_TOOL_TIMER_CONTINUE = "timer_continue"
-LEGACY_TOOL_TIMER_ABORT = "timer_abort"
-LEGACY_TOOL_TIMER_STOP = "timer_stop"
-LEGACY_TOOL_TIMER_RESET = "timer_reset"
-
-LEGACY_ACTION_BY_TOOL: dict[str, str] = {
-    LEGACY_TOOL_TIMER_START: ACTION_START,
-    LEGACY_TOOL_TIMER_PAUSE: ACTION_PAUSE,
-    LEGACY_TOOL_TIMER_CONTINUE: ACTION_CONTINUE,
-    LEGACY_TOOL_TIMER_ABORT: INTENT_STOP,
-    LEGACY_TOOL_TIMER_STOP: INTENT_STOP,
-    LEGACY_TOOL_TIMER_RESET: ACTION_RESET,
-}
 
 ACTION_PATTERNS: dict[str, re.Pattern[str]] = {
     ACTION_START: re.compile(r"\b(start|starte|beginn|beginne|anfang|los)\b", re.I),

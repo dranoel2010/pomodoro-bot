@@ -35,8 +35,6 @@ from .parser_extractors import (
 )
 from .parser_messages import fallback_assistant_text, normalize_assistant_text
 from .parser_rules import (
-    LEGACY_ACTION_BY_TOOL,
-    LEGACY_TOOL_TIMER_START,
     detect_action,
     has_pomodoro_context,
     has_timer_context,
@@ -47,7 +45,7 @@ from .types import StructuredResponse, ToolCall, ToolName
 
 
 class ResponseParser:
-    """Normalize model output and apply compatibility fallbacks.
+    """Normalize model output and apply intent fallbacks.
 
     Note:
         Tool-call inference from the user prompt is intentionally enabled as a
@@ -129,7 +127,7 @@ class ResponseParser:
 
         raw_arguments = tool_call.get("arguments")
         arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
-        normalized_name = self._resolve_tool_name(raw_name, arguments, user_prompt)
+        normalized_name = self._resolve_tool_name(raw_name)
         if normalized_name is None:
             return None
 
@@ -141,34 +139,11 @@ class ResponseParser:
 
         return self._tool_call(normalized_name, normalized_arguments)
 
-    def _resolve_tool_name(
-        self, raw_name: str, arguments: dict[str, Any], user_prompt: str
-    ) -> Optional[str]:
+    def _resolve_tool_name(self, raw_name: str) -> Optional[str]:
         normalized_name = raw_name.strip()
         if normalized_name in TOOL_NAMES:
             return normalized_name
-
-        action = LEGACY_ACTION_BY_TOOL.get(normalized_name)
-        if action is None:
-            return None
-
-        if normalized_name == LEGACY_TOOL_TIMER_START:
-            if "focus_topic" in arguments or "session" in arguments:
-                return INTENT_TO_POMODORO_TOOL[action]
-            if "duration" in arguments:
-                return INTENT_TO_TIMER_TOOL[action]
-
-        lowered = user_prompt.lower()
-        has_pomodoro = has_pomodoro_context(lowered)
-        has_timer = has_timer_context(lowered)
-
-        if has_pomodoro and not has_timer:
-            return INTENT_TO_POMODORO_TOOL[action]
-        if has_timer and not has_pomodoro:
-            return INTENT_TO_TIMER_TOOL[action]
-
-        # Keep legacy behavior as default for ambiguous old aliases.
-        return INTENT_TO_POMODORO_TOOL[action]
+        return None
 
     def _normalize_arguments_for_tool(
         self, tool_name: str, arguments: dict[str, Any], user_prompt: str
@@ -187,7 +162,6 @@ class ResponseParser:
         if tool_name == TOOL_START_POMODORO:
             raw_topic = (
                 arguments.get("focus_topic")
-                or arguments.get("session")
                 or extract_focus_topic(user_prompt)
                 or self._last_focus_topic
                 or DEFAULT_FOCUS_TOPIC_DE

@@ -77,7 +77,3 @@ class TEMT6000Sensor:
             "light_intensity_pct": round(intensity_pct, 2),
         }
         return readings
-
-
-# Backward-compatibility alias for previous typoed class name.
-TMT6000Sensor = TEMT6000Sensor

@@ -1,6 +1,6 @@
 """llama.cpp backend wrapper with constrained JSON grammar output."""
 
-from typing import Any
+from typing import Any, Optional
 
 from contracts.tool_contract import tool_name_gbnf_alternatives
 
@@ -51,6 +51,10 @@ class LlamaBackend:
         )
         self._grammar = LlamaGrammar.from_string(build_gbnf_schema())
         self._config = config
+        self._last_finish_reason: Optional[str] = None
+        self._last_prompt_tokens: Optional[int] = None
+        self._last_completion_tokens: Optional[int] = None
+        self._last_total_tokens: Optional[int] = None
 
     def complete(self, messages: list[dict[str, str]], max_tokens: int) -> str:
         response: dict[str, Any] = self._llm.create_chat_completion(
@@ -61,4 +65,44 @@ class LlamaBackend:
             max_tokens=max_tokens,
             grammar=self._grammar,
         )
-        return response["choices"][0]["message"]["content"]
+        choice = response["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        self._last_finish_reason = (
+            str(finish_reason) if finish_reason is not None else None
+        )
+
+        usage = response.get("usage")
+        if isinstance(usage, dict):
+            self._last_prompt_tokens = _as_int(usage.get("prompt_tokens"))
+            self._last_completion_tokens = _as_int(usage.get("completion_tokens"))
+            self._last_total_tokens = _as_int(usage.get("total_tokens"))
+        else:
+            self._last_prompt_tokens = None
+            self._last_completion_tokens = None
+            self._last_total_tokens = None
+
+        return choice["message"]["content"]
+
+    @property
+    def last_finish_reason(self) -> Optional[str]:
+        return self._last_finish_reason
+
+    @property
+    def last_prompt_tokens(self) -> Optional[int]:
+        return self._last_prompt_tokens
+
+    @property
+    def last_completion_tokens(self) -> Optional[int]:
+        return self._last_completion_tokens
+
+    @property
+    def last_total_tokens(self) -> Optional[int]:
+        return self._last_total_tokens
+
+
+def _as_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None

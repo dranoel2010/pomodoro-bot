@@ -7,7 +7,7 @@ Local LLM integration that generates structured assistant replies and normalized
 - `config.py`: validates model/runtime settings and resolves local model paths.
 - `model_store.py`: downloads and validates GGUF files from Hugging Face.
 - `llama_backend.py`: llama.cpp wrapper with grammar-constrained JSON output.
-- `parser.py`: JSON normalization with compatibility and intent fallback behavior.
+- `parser.py`: JSON normalization with intent fallback behavior.
 - `service.py`: `PomodoroAssistantLLM` orchestration entrypoint.
 - `types.py`: typed response and environment context payloads.
 

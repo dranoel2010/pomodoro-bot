@@ -9,7 +9,7 @@ from .errors import (
     OracleError,
     OracleReadError,
 )
-from .sensor import ENS160Sensor, TEMT6000Sensor, TMT6000Sensor
+from .sensor import ENS160Sensor, TEMT6000Sensor
 from .service import OracleContextService
 
 __all__ = [
@@ -23,5 +23,4 @@ __all__ = [
     "OracleError",
     "OracleReadError",
     "TEMT6000Sensor",
-    "TMT6000Sensor",
 ]

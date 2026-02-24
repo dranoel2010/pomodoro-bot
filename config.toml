@@ -4,7 +4,7 @@ pv_file = "models/sst/porcupine_params_de.pv"
 
 adaptive_threshold_multiplier = 1.5
 device_index = 0
-energy_threshold = 100
+energy_threshold = 10
 max_utterance_seconds = 10.0
 min_speech_seconds = 0.15
 no_speech_timeout_seconds = 3.0
@@ -36,7 +36,7 @@ hf_filename = "Qwen3-1.7B-Q4_K_M.gguf"          # Qwen3-1.7B-Q8_0.gguf, Qwen2.5-
 hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf" # Qwen/Qwen3-1.7B-GGUF, Qwen/Qwen2.5-3B-Instruct-GGUF  , byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF
 hf_revision = "main"
 n_batch = 256
-n_ctx = 2048
+n_ctx = 4096
 n_threads = 4
 repeat_penalty = 1.1
 system_prompt = "prompts/system_prompt.md"
