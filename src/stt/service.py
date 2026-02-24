@@ -34,11 +34,10 @@ class WakeWordService:
         self._logger = logger or logging.getLogger(__name__)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
-        self._ready_event = threading.Event()  # NEW: Signals when ready to detect
+        self._ready_event = threading.Event()
         self._running_lock = threading.Lock()
         self._running = False
 
-        # Initialize VAD
         self._vad = VoiceActivityDetector(
             energy_threshold=config.energy_threshold,
             adaptive_multiplier=config.adaptive_threshold_multiplier,
@@ -46,7 +45,6 @@ class WakeWordService:
             logger=self._logger.getChild("vad"),
         )
 
-        # Initialize utterance capture
         self._capture = UtteranceCapture(
             vad=self._vad,
             silence_timeout_seconds=config.silence_timeout_seconds,
@@ -60,9 +58,7 @@ class WakeWordService:
     def is_running(self) -> bool:
         """Check if the service is currently running."""
         with self._running_lock:
-            return (
-                self._running and self._thread is not None and self._thread.is_alive()
-            )
+            return self._running and self._thread is not None and self._thread.is_alive()
 
     @property
     def is_ready(self) -> bool:
@@ -89,7 +85,7 @@ class WakeWordService:
 
             self._logger.debug("Starting wake word service")
             self._stop_event.clear()
-            self._ready_event.clear()  # Reset ready state
+            self._ready_event.clear()
             self._running = True
 
             self._thread = threading.Thread(
@@ -110,7 +106,7 @@ class WakeWordService:
 
         self._logger.debug("Stopping wake word service")
         self._stop_event.set()
-        self._ready_event.clear()  # Clear ready state
+        self._ready_event.clear()
 
         if self._thread:
             self._thread.join(timeout=timeout_seconds)
@@ -120,7 +116,6 @@ class WakeWordService:
                     f"Service thread did not stop within {timeout_seconds}s. "
                     "Thread may still be running (daemon will be killed on exit)."
                 )
-                # Do NOT set _running to False here - thread is still alive
             else:
                 self._logger.debug("Service stopped successfully")
                 with self._running_lock:
@@ -141,7 +136,7 @@ class WakeWordService:
             )
 
             self._logger.debug(
-                f"Initializing audio recorder (device {self._config.device_index})"
+                "Initializing audio recorder (device %s)", self._config.device_index
             )
             recorder = PvRecorder(
                 frame_length=porcupine.frame_length,
@@ -157,15 +152,15 @@ class WakeWordService:
                 try:
                     recorder.stop()
                     recorder.delete()
-                except Exception as e:
-                    self._logger.error(f"Error cleaning up recorder: {e}")
+                except Exception as error:
+                    self._logger.error("Error cleaning up recorder: %s", error)
 
             if porcupine:
                 self._logger.debug("Cleaning up Porcupine")
                 try:
                     porcupine.delete()
-                except Exception as e:
-                    self._logger.error(f"Error cleaning up Porcupine: {e}")
+                except Exception as error:
+                    self._logger.error("Error cleaning up Porcupine: %s", error)
 
     def _calibrate_noise_floor(
         self, recorder: PvRecorder, sample_rate: int, frame_length: int
@@ -192,16 +187,12 @@ class WakeWordService:
         """Main service loop."""
         try:
             with self._create_resources() as (porcupine, recorder):
-                # Calibrate noise floor for adaptive thresholding
                 self._calibrate_noise_floor(
                     recorder, porcupine.sample_rate, porcupine.frame_length
                 )
 
-                # Signal that we're ready to detect wake words
                 self._ready_event.set()
-                self._logger.debug(
-                    "Wake word service ready, listening for wake word..."
-                )
+                self._logger.debug("Wake word service ready, listening for wake word...")
 
                 while not self._stop_event.is_set():
                     pcm = recorder.read()
@@ -230,7 +221,7 @@ class WakeWordService:
                             self._logger.warning("No valid utterance captured")
 
         except Exception as error:
-            self._logger.error(f"Wake word service error: {error}", exc_info=True)
+            self._logger.error("Wake word service error: %s", error, exc_info=True)
             self._publisher.publish(
                 WakeWordErrorEvent(
                     occurred_at=datetime.now(timezone.utc),
@@ -239,7 +230,7 @@ class WakeWordService:
                 )
             )
         finally:
-            self._ready_event.clear()  # No longer ready
+            self._ready_event.clear()
             with self._running_lock:
                 self._running = False
             self._logger.debug("Wake word service terminated")

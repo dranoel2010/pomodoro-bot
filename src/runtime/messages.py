@@ -23,7 +23,7 @@ from pomodoro.constants import (
     REASON_TIMER_ACTIVE,
 )
 
-ACTIVE_SESSION_PHASES: set[str] = set(ACTIVE_PHASES)
+ACTIVE_SESSION_PHASES = ACTIVE_PHASES
 
 
 def format_duration(seconds: int) -> str:

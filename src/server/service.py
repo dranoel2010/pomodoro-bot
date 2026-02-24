@@ -52,10 +52,6 @@ class UIServer:
         return self._config.port
 
     @property
-    def websocket_path(self) -> str:
-        return self._config.websocket_path
-
-    @property
     def is_running(self) -> bool:
         return (
             self._thread is not None

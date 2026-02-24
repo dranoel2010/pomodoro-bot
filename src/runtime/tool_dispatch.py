@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
-from pomodoro import PomodoroSnapshot, PomodoroTimer, remap_timer_tool_for_active_pomodoro
+from pomodoro import PomodoroTimer, remap_timer_tool_for_active_pomodoro
 from pomodoro.constants import (
     ACTION_ABORT,
     ACTION_RESET,
@@ -22,7 +22,6 @@ from contracts.tool_contract import (
 )
 
 from .calendar_tools import handle_calendar_tool_call, parse_duration_seconds
-from .contracts import AppConfigLike, CalendarOracleLike
 from .messages import (
     ACTIVE_SESSION_PHASES,
     default_pomodoro_text,
@@ -34,6 +33,10 @@ from .messages import (
 )
 from .ui import RuntimeUIPublisher
 
+if TYPE_CHECKING:
+    from app_config import AppConfig
+    from oracle import OracleContextService
+
 
 class RuntimeToolDispatcher:
     """Routes tool calls to timer, pomodoro, and calendar handlers."""
@@ -41,8 +44,8 @@ class RuntimeToolDispatcher:
         self,
         *,
         logger: logging.Logger,
-        app_config: AppConfigLike,
-        oracle_service: Optional[CalendarOracleLike],
+        app_config: "AppConfig",
+        oracle_service: Optional["OracleContextService"],
         pomodoro_timer: PomodoroTimer,
         countdown_timer: PomodoroTimer,
         ui: RuntimeUIPublisher,
@@ -63,28 +66,32 @@ class RuntimeToolDispatcher:
             return timer_status_message(timer_snapshot)
         return "Listening for wake word"
 
-    def handle_tool_call(self, tool_call: dict[str, Any], assistant_text: str) -> str:
+    def handle_tool_call(self, tool_call: dict[str, object], assistant_text: str) -> str:
         raw_name = tool_call.get("name")
         if not isinstance(raw_name, str):
             return assistant_text
         raw_arguments = tool_call.get("arguments")
-        arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
+        normalized_arguments = (
+            {key: value for key, value in raw_arguments.items() if isinstance(key, str)}
+            if isinstance(raw_arguments, dict)
+            else {}
+        )
 
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
-        if self._is_session_active(pomodoro_snapshot):
+        if pomodoro_snapshot.phase in ACTIVE_SESSION_PHASES:
             raw_name = remap_timer_tool_for_active_pomodoro(
                 raw_name,
                 pomodoro_active=True,
             )
 
         if raw_name in POMODORO_TOOL_TO_RUNTIME_ACTION:
-            return self._handle_pomodoro_tool_call(raw_name, arguments, assistant_text)
+            return self._handle_pomodoro_tool_call(raw_name, normalized_arguments, assistant_text)
         if raw_name in TIMER_TOOL_TO_RUNTIME_ACTION:
-            return self._handle_timer_tool_call(raw_name, arguments, assistant_text)
+            return self._handle_timer_tool_call(raw_name, normalized_arguments, assistant_text)
         if raw_name in CALENDAR_TOOL_NAMES:
             return handle_calendar_tool_call(
                 tool_name=raw_name,
-                arguments=arguments,
+                arguments=normalized_arguments,
                 oracle_service=self._oracle_service,
                 app_config=self._app_config,
                 logger=self._logger,
@@ -96,12 +103,12 @@ class RuntimeToolDispatcher:
     def _handle_pomodoro_tool_call(
         self,
         tool_name: str,
-        arguments: dict[str, Any],
+        arguments: dict[str, object],
         assistant_text: str,
     ) -> str:
         action = POMODORO_TOOL_TO_RUNTIME_ACTION[tool_name]
         timer_snapshot = self._countdown_timer.snapshot()
-        if self._is_session_active(timer_snapshot):
+        if timer_snapshot.phase in ACTIVE_SESSION_PHASES:
             if action in {ACTION_START, ACTION_RESET}:
                 self._stop_timer_for_pomodoro_switch()
             else:
@@ -116,20 +123,15 @@ class RuntimeToolDispatcher:
                 )
                 return response_text
 
-        focus_topic_raw = arguments.get("focus_topic")
-        focus_topic = (
-            str(focus_topic_raw).strip()
-            if isinstance(focus_topic_raw, str) and focus_topic_raw.strip()
-            else None
-        )
+        focus_topic = arguments.get("focus_topic")
+        focus_topic = focus_topic.strip() if isinstance(focus_topic, str) else None
+        focus_topic = focus_topic or None
         result = self._pomodoro_timer.apply(action, session=focus_topic)
-        if result.accepted:
-            response_text = assistant_text.strip() or default_pomodoro_text(
-                action,
-                result.snapshot,
-            )
-        else:
-            response_text = pomodoro_rejection_text(action, result.reason)
+        response_text = (
+            assistant_text.strip() or default_pomodoro_text(action, result.snapshot)
+            if result.accepted
+            else pomodoro_rejection_text(action, result.reason)
+        )
         self._ui.publish_pomodoro_update(
             result.snapshot,
             action=action,
@@ -143,12 +145,12 @@ class RuntimeToolDispatcher:
     def _handle_timer_tool_call(
         self,
         tool_name: str,
-        arguments: dict[str, Any],
+        arguments: dict[str, object],
         assistant_text: str,
     ) -> str:
         action = TIMER_TOOL_TO_RUNTIME_ACTION[tool_name]
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
-        if self._is_session_active(pomodoro_snapshot):
+        if pomodoro_snapshot.phase in ACTIVE_SESSION_PHASES:
             response_text = timer_rejection_text(action, REASON_POMODORO_ACTIVE)
             self._ui.publish_timer_update(
                 self._countdown_timer.snapshot(),
@@ -173,13 +175,11 @@ class RuntimeToolDispatcher:
         else:
             result = self._countdown_timer.apply(action, session=DEFAULT_TIMER_SESSION_NAME)
 
-        if result.accepted:
-            response_text = assistant_text.strip() or default_timer_text(
-                action,
-                result.snapshot,
-            )
-        else:
-            response_text = timer_rejection_text(action, result.reason)
+        response_text = (
+            assistant_text.strip() or default_timer_text(action, result.snapshot)
+            if result.accepted
+            else timer_rejection_text(action, result.reason)
+        )
         self._ui.publish_timer_update(
             result.snapshot,
             action=action,
@@ -190,12 +190,9 @@ class RuntimeToolDispatcher:
         )
         return response_text
 
-    def _is_session_active(self, snapshot: PomodoroSnapshot) -> bool:
-        return snapshot.phase in ACTIVE_SESSION_PHASES
-
     def _stop_timer_for_pomodoro_switch(self) -> None:
         timer_snapshot = self._countdown_timer.snapshot()
-        if not self._is_session_active(timer_snapshot):
+        if timer_snapshot.phase not in ACTIVE_SESSION_PHASES:
             return
 
         result = self._countdown_timer.apply(ACTION_ABORT, session=DEFAULT_TIMER_SESSION_NAME)

@@ -8,13 +8,28 @@ import signal
 import sys
 import time
 from logging.handlers import QueueListener
-from typing import Any, Optional
+from multiprocessing.queues import Queue as MPQueue
+from types import FrameType
+from typing import TYPE_CHECKING
 
-from contracts.ui_protocol import STATE_IDLE
+from app_config import (
+    AppConfig,
+    AppConfigurationError,
+    SecretConfig,
+    load_app_config,
+    load_secret_config,
+    resolve_config_path,
+)
+from contracts.closeable_protocol import Closeable
+from contracts.errors import StartupError
+from llm import create_llm_client
+from oracle import create_oracle_service
+from server import create_ui_server
+from stt import create_stt_client
+from tts import create_tts_client
 
-
-class StartupError(Exception):
-    """Raised when runtime startup cannot continue."""
+if TYPE_CHECKING:
+    from stt import WakeWordService
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
@@ -29,11 +44,12 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     return logging.getLogger("wake_word_app")
 
 
-def setup_signal_handlers(service: Any) -> None:
+def setup_signal_handlers(service: WakeWordService) -> None:
     """Set up graceful shutdown on SIGTERM and SIGINT."""
+
     logger = logging.getLogger("wake_word_app")
 
-    def signal_handler(signum: int, frame: Any) -> None:
+    def signal_handler(signum: int, frame: FrameType | None) -> None:
         del frame
         signal_name = signal.Signals(signum).name
         logger.info("%s received, stopping...", signal_name)
@@ -47,288 +63,45 @@ def setup_signal_handlers(service: Any) -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
 
-def wait_for_service_ready(service: Any, timeout: float = 10.0) -> bool:
-    """Wait for service to become ready, with fast-fail on crash."""
-    start_time = time.time()
-    poll_interval = 0.1
+def _wait_for_service_ready_callback(
+    service: WakeWordService, timeout: float = 10.0
+) -> bool:
+    """RuntimeEngine callback for wake-word startup readiness.
 
-    while time.time() - start_time < timeout:
-        if service.is_ready:
-            return True
+    Returns `False` when startup times out or the service stops before becoming
+    ready. RuntimeEngine handles this return value and aborts startup.
+    """
 
+    deadline = time.monotonic() + timeout
+    poll_interval_seconds = 0.25
+
+    while time.monotonic() < deadline:
         if not service.is_running:
             return False
 
-        time.sleep(poll_interval)
+        remaining = deadline - time.monotonic()
+        wait_seconds = min(poll_interval_seconds, max(remaining, 0.0))
+        if service.wait_until_ready(timeout=wait_seconds):
+            return True
 
-    return service.is_ready
+    return bool(service.is_ready)
 
 
-def _load_runtime_config(logger: logging.Logger) -> tuple[Any, Any]:
-    from app_config import (
-        AppConfigurationError,
-        load_app_config,
-        load_secret_config,
-        resolve_config_path,
-    )
-
+def _load_runtime_config(logger: logging.Logger) -> tuple[AppConfig, SecretConfig]:
     try:
         config_path = resolve_config_path()
         app_config = load_app_config(str(config_path))
         secret_config = load_secret_config()
     except AppConfigurationError as error:
-        raise StartupError(f"App configuration error: {error}") from error
+        raise StartupError(f"App configuration error: {error}")
 
     logger.info("Loaded runtime config: %s", config_path)
     return app_config, secret_config
 
 
-def _initialize_stt(
-    *,
-    app_config: Any,
-    secret_config: Any,
-    worker_log_queue: Optional[Any],
-    worker_log_level: int,
-) -> tuple[Any, Any]:
-    try:
-        from stt import (
-            ConfigurationError,
-            STTConfig,
-            WakeWordConfig,
-        )
-        from runtime.process_workers import ProcessSTTClient
-    except Exception as error:
-        raise StartupError(f"STT module import error: {error}") from error
-
-    try:
-        wake_word_config = WakeWordConfig.from_settings(
-            pico_voice_access_key=secret_config.pico_voice_access_key,
-            settings=app_config.wake_word,
-        )
-        stt_config = STTConfig.from_settings(app_config.stt)
-    except ConfigurationError as error:
-        raise StartupError(f"Configuration error: {error}") from error
-
-    try:
-        stt = ProcessSTTClient(
-            config=stt_config,
-            cpu_cores=app_config.stt.cpu_cores,
-            logger=logging.getLogger("stt.process"),
-            log_queue=worker_log_queue,
-            log_level=worker_log_level,
-        )
-    except Exception as error:
-        raise StartupError(f"STT initialization error: {error}") from error
-
-    return wake_word_config, stt
-
-
-def _initialize_tts(
-    *,
-    app_config: Any,
-    logger: logging.Logger,
-    worker_log_queue: Optional[Any],
-    worker_log_level: int,
-) -> Optional[Any]:
-    if not app_config.tts.enabled:
-        return None
-
-    try:
-        from tts import TTSConfig, TTSConfigurationError
-        from runtime.process_workers import ProcessTTSClient
-    except Exception as error:
-        raise StartupError(f"TTS module import error: {error}") from error
-
-    try:
-        tts_config = TTSConfig.from_settings(app_config.tts)
-        speech_service = ProcessTTSClient(
-            config=tts_config,
-            cpu_cores=app_config.tts.cpu_cores,
-            logger=logging.getLogger("tts.process"),
-            log_queue=worker_log_queue,
-            log_level=worker_log_level,
-        )
-    except TTSConfigurationError as error:
-        raise StartupError(f"TTS initialization error: {error}") from error
-    except Exception as error:
-        raise StartupError(f"TTS initialization error: {error}") from error
-
-    logger.info("TTS enabled")
-    return speech_service
-
-
-def _initialize_llm(
-    *,
-    app_config: Any,
-    secret_config: Any,
-    speech_service: Optional[Any],
-    logger: logging.Logger,
-    worker_log_queue: Optional[Any],
-    worker_log_level: int,
-) -> Optional[Any]:
-    if not app_config.llm.enabled:
-        if speech_service is not None:
-            logger.warning(
-                "TTS is enabled but LLM is disabled; no spoken reply will be generated."
-            )
-        return None
-
-    try:
-        from llm import LLMConfig
-        from runtime.process_workers import ProcessLLMClient
-    except Exception as error:
-        raise StartupError(f"LLM module import error: {error}") from error
-
-    try:
-        llm_config = LLMConfig.from_sources(
-            model_dir=app_config.llm.model_path,
-            hf_filename=app_config.llm.hf_filename,
-            hf_repo_id=app_config.llm.hf_repo_id or None,
-            hf_revision=app_config.llm.hf_revision or None,
-            hf_token=secret_config.hf_token,
-            system_prompt_path=app_config.llm.system_prompt or None,
-            n_threads=app_config.llm.n_threads,
-            n_ctx=app_config.llm.n_ctx,
-            n_batch=app_config.llm.n_batch,
-            temperature=app_config.llm.temperature,
-            top_p=app_config.llm.top_p,
-            repeat_penalty=app_config.llm.repeat_penalty,
-            verbose=app_config.llm.verbose,
-            logger=logging.getLogger("llm.config"),
-        )
-        assistant_llm = ProcessLLMClient(
-            config=llm_config,
-            cpu_cores=app_config.llm.cpu_cores,
-            logger=logging.getLogger("llm.process"),
-            log_queue=worker_log_queue,
-            log_level=worker_log_level,
-        )
-    except Exception as error:
-        raise StartupError(f"LLM initialization error: {error}") from error
-
-    logger.info("LLM enabled (model: %s)", llm_config.model_path)
-    return assistant_llm
-
-
-def _initialize_oracle_context(
-    *,
-    app_config: Any,
-    secret_config: Any,
-    assistant_llm: Optional[Any],
-    logger: logging.Logger,
-) -> Optional[Any]:
-    if assistant_llm is None:
-        return None
-
-    try:
-        from oracle import OracleConfig, OracleContextService
-
-        oracle_config = OracleConfig.from_settings(
-            app_config.oracle,
-            calendar_id=secret_config.oracle_google_calendar_id,
-            calendar_service_account_file=secret_config.oracle_google_service_account_file,
-        )
-        return OracleContextService(
-            config=oracle_config,
-            logger=logging.getLogger("oracle"),
-        )
-    except Exception as error:
-        logger.warning("Oracle context disabled due to init error: %s", error)
-        return None
-
-
-def _initialize_ui_server(*, app_config: Any, logger: logging.Logger) -> Optional[Any]:
-    try:
-        from server import ServerConfigurationError, UIServer, UIServerConfig
-
-        ui_server_config = UIServerConfig.from_settings(app_config.ui_server)
-    except ServerConfigurationError as error:
-        logger.error("UI server configuration error: %s", error)
-        logger.warning("Continuing without UI server.")
-        return None
-    except Exception as error:
-        logger.error("UI server initialization error: %s", error)
-        logger.warning("Continuing without UI server.")
-        return None
-
-    if not ui_server_config.enabled:
-        return None
-
-    try:
-        ui_server = UIServer(
-            config=ui_server_config,
-            logger=logging.getLogger("ui_server"),
-        )
-        logger.info("Starting UI server...")
-        ui_server.start(timeout_seconds=5.0)
-        logger.info(
-            "UI server ready at http://%s:%d",
-            ui_server.host,
-            ui_server.port,
-        )
-        ui_server.publish_state(STATE_IDLE, message="UI server connected")
-        return ui_server
-    except Exception as error:
-        logger.error("UI server startup failed: %s", error)
-        logger.warning("Continuing without UI server.")
-        return None
-
-
-def _run_runtime(
-    *,
-    logger: logging.Logger,
-    app_config: Any,
-    wake_word_config: Any,
-    stt: Any,
-    assistant_llm: Optional[Any],
-    speech_service: Optional[Any],
-    oracle_service: Optional[Any],
-    ui_server: Optional[Any],
-) -> int:
-    try:
-        from runtime import RuntimeBootstrap, RuntimeEngine, RuntimeHooks
-    except Exception as error:
-        raise StartupError(f"Runtime loop initialization error: {error}") from error
-
-    runtime_bootstrap = RuntimeBootstrap(
-        logger=logger,
-        app_config=app_config,
-        wake_word_config=wake_word_config,
-        stt=stt,
-        assistant_llm=assistant_llm,
-        speech_service=speech_service,
-        oracle_service=oracle_service,
-        ui_server=ui_server,
-        hooks=RuntimeHooks(
-            setup_signal_handlers=setup_signal_handlers,
-            wait_for_service_ready=wait_for_service_ready,
-        ),
-    )
-    return RuntimeEngine(runtime_bootstrap).run()
-
-
-def _close_resource(
-    resource: Optional[Any],
-    *,
-    resource_name: str,
-    logger: logging.Logger,
-) -> None:
-    if resource is None:
-        return
-
-    close_fn = getattr(resource, "close", None)
-    if not callable(close_fn):
-        return
-
-    try:
-        close_fn()
-    except Exception as error:
-        logger.error("Failed to close %s: %s", resource_name, error)
-
-
-def _start_worker_log_listener() -> tuple[Any, QueueListener]:
+def _start_log_listener() -> tuple[MPQueue, QueueListener]:
     spawn_context = multiprocessing.get_context("spawn")
-    log_queue: Any = spawn_context.Queue()
+    log_queue: MPQueue = spawn_context.Queue()
     handlers = list(logging.getLogger().handlers)
     listener = QueueListener(log_queue, *handlers, respect_handler_level=True)
     listener.start()
@@ -337,75 +110,95 @@ def _start_worker_log_listener() -> tuple[Any, QueueListener]:
 
 def main() -> int:
     """Run the wake-word assistant runtime."""
+
     logger = setup_logging(level=logging.INFO)
-    stt: Optional[Any] = None
-    speech_service: Optional[Any] = None
-    assistant_llm: Optional[Any] = None
-    worker_log_queue: Optional[Any] = None
-    worker_log_listener: Optional[QueueListener] = None
+    stt_client: Closeable | None = None
+    speech_service: Closeable | None = None
+    assistant_llm: Closeable | None = None
+    log_listener: QueueListener | None = None
 
     try:
-        worker_log_level = logging.getLogger().getEffectiveLevel()
-        worker_log_queue, worker_log_listener = _start_worker_log_listener()
+        log_queue, log_listener = _start_log_listener()
         app_config, secret_config = _load_runtime_config(logger)
-        wake_word_config, stt = _initialize_stt(
-            app_config=app_config,
-            secret_config=secret_config,
-            worker_log_queue=worker_log_queue,
-            worker_log_level=worker_log_level,
+        log_level = logging.getLogger().getEffectiveLevel()
+
+        wake_word_config, stt_client = create_stt_client(
+            wake_word=app_config.wake_word,
+            stt=app_config.stt,
+            pico_key=secret_config.pico_voice_access_key,
+            log_queue=log_queue,
+            log_level=log_level,
         )
-        speech_service = _initialize_tts(
-            app_config=app_config,
-            logger=logger,
-            worker_log_queue=worker_log_queue,
-            worker_log_level=worker_log_level,
+
+        speech_service = create_tts_client(
+            tts=app_config.tts,
+            log_queue=log_queue,
+            log_level=log_level,
         )
-        assistant_llm = _initialize_llm(
-            app_config=app_config,
-            secret_config=secret_config,
-            speech_service=speech_service,
-            logger=logger,
-            worker_log_queue=worker_log_queue,
-            worker_log_level=worker_log_level,
-        )
-        oracle_service = _initialize_oracle_context(
-            app_config=app_config,
-            secret_config=secret_config,
-            assistant_llm=assistant_llm,
+
+        assistant_llm = create_llm_client(
+            llm=app_config.llm,
+            hf_token=secret_config.hf_token,
+            log_queue=log_queue,
+            log_level=log_level,
             logger=logger,
         )
-        ui_server = _initialize_ui_server(app_config=app_config, logger=logger)
-        return _run_runtime(
+        if assistant_llm is None and speech_service is not None:
+            logger.warning(
+                "TTS is enabled but LLM is disabled; no spoken reply will be generated."
+            )
+
+        oracle_service = None
+        if assistant_llm is not None:
+            oracle_service = create_oracle_service(
+                oracle=app_config.oracle,
+                calendar_id=secret_config.oracle_google_calendar_id,
+                service_account_file=secret_config.oracle_google_service_account_file,
+                logger=logger,
+            )
+
+        ui_server = create_ui_server(
+            ui=app_config.ui_server,
+            logger=logger,
+        )
+
+        try:
+            from runtime import RuntimeEngine
+        except ImportError as error:
+            raise StartupError(f"Runtime loop import error: {error}")
+
+        return RuntimeEngine(
             logger=logger,
             app_config=app_config,
             wake_word_config=wake_word_config,
-            stt=stt,
+            stt=stt_client,
             assistant_llm=assistant_llm,
             speech_service=speech_service,
             oracle_service=oracle_service,
             ui_server=ui_server,
-        )
+            setup_signal_handlers=setup_signal_handlers,
+            wait_for_service_ready=_wait_for_service_ready_callback,
+        ).run()
     except StartupError as error:
         logger.error("%s", error)
         return 1
+    except Exception:
+        logger.exception("Unhandled startup failure")
+        return 1
     finally:
-        _close_resource(
-            assistant_llm,
-            resource_name="LLM process client",
-            logger=logger,
-        )
-        _close_resource(
-            speech_service,
-            resource_name="TTS process client",
-            logger=logger,
-        )
-        _close_resource(
-            stt,
-            resource_name="STT process client",
-            logger=logger,
-        )
-        if worker_log_listener is not None:
-            worker_log_listener.stop()
+        for resource, name in (
+            (assistant_llm, "LLM process client"),
+            (speech_service, "TTS process client"),
+            (stt_client, "STT process client"),
+        ):
+            if resource is None:
+                continue
+            try:
+                resource.close()
+            except Exception as error:
+                logger.error("Failed to close %s: %s", name, error)
+        if log_listener is not None:
+            log_listener.stop()
 
 
 if __name__ == "__main__":

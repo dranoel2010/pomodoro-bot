@@ -22,6 +22,7 @@ class LLMConfig:
 
     model_path: str
     system_prompt_path: Optional[str] = None
+    max_tokens: int = 256
     n_threads: int = 4
     n_ctx: int = 2048
     n_batch: int = 256
@@ -64,6 +65,15 @@ class LLMConfig:
                 f"n_batch ({self.n_batch}) cannot exceed n_ctx ({self.n_ctx})"
             )
 
+        if self.max_tokens < 1:
+            raise ConfigurationError(
+                f"max_tokens must be >= 1, got: {self.max_tokens}"
+            )
+        if self.max_tokens > self.n_ctx:
+            raise ConfigurationError(
+                f"max_tokens ({self.max_tokens}) cannot exceed n_ctx ({self.n_ctx})"
+            )
+
         if not 0.0 <= self.temperature <= 2.0:
             raise ConfigurationError(
                 f"temperature must be in [0.0, 2.0], got: {self.temperature}"
@@ -87,13 +97,14 @@ class LLMConfig:
         hf_revision: Optional[str] = None,
         hf_token: Optional[str] = None,
         system_prompt_path: Optional[str] = None,
-        n_threads: int = 4,
-        n_ctx: int = 2048,
-        n_batch: int = 256,
-        temperature: float = 0.2,
-        top_p: float = 0.9,
-        repeat_penalty: float = 1.1,
-        verbose: bool = False,
+        max_tokens: Optional[int] = None,
+        n_threads: Optional[int] = None,
+        n_ctx: Optional[int] = None,
+        n_batch: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        repeat_penalty: Optional[float] = None,
+        verbose: Optional[bool] = None,
         logger: Optional[logging.Logger] = None,
     ) -> "LLMConfig":
         logger = logger or logging.getLogger(__name__)
@@ -109,17 +120,27 @@ class LLMConfig:
         except (ValueError, ModelDownloadError) as e:
             raise ConfigurationError(f"Failed to resolve model path: {e}") from e
 
-        return cls(
-            model_path=model_path,
-            system_prompt_path=(system_prompt_path or "").strip() or None,
-            n_threads=n_threads,
-            n_ctx=n_ctx,
-            n_batch=n_batch,
-            temperature=temperature,
-            top_p=top_p,
-            repeat_penalty=repeat_penalty,
-            verbose=verbose,
-        )
+        config_kwargs: dict[str, object] = {
+            "model_path": model_path,
+            "system_prompt_path": (system_prompt_path or "").strip() or None,
+        }
+        if max_tokens is not None:
+            config_kwargs["max_tokens"] = max_tokens
+        if n_threads is not None:
+            config_kwargs["n_threads"] = n_threads
+        if n_ctx is not None:
+            config_kwargs["n_ctx"] = n_ctx
+        if n_batch is not None:
+            config_kwargs["n_batch"] = n_batch
+        if temperature is not None:
+            config_kwargs["temperature"] = temperature
+        if top_p is not None:
+            config_kwargs["top_p"] = top_p
+        if repeat_penalty is not None:
+            config_kwargs["repeat_penalty"] = repeat_penalty
+        if verbose is not None:
+            config_kwargs["verbose"] = verbose
+        return cls(**config_kwargs)
 
     @staticmethod
     def _resolve_model_path_from_values(

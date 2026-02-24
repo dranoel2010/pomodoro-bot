@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
 
 from pomodoro import PomodoroSnapshot
 from contracts.ui_protocol import EVENT_POMODORO, EVENT_TIMER
 
 
-class UIServerLike(Protocol):
-    """Protocol for UI servers used by runtime publishing adapters."""
-    def publish(self, event_type: str, **payload: Any) -> None:
+class UISink(Protocol):
+    def publish(self, event_type: str, **payload: object) -> None:
         ...
 
     def publish_state(
@@ -18,17 +17,18 @@ class UIServerLike(Protocol):
         state: str,
         *,
         message: Optional[str] = None,
-        **payload: Any,
+        **payload: object,
     ) -> None:
         ...
 
 
 class RuntimeUIPublisher:
     """Safe facade that emits runtime updates when a UI server is available."""
-    def __init__(self, ui_server: Optional[UIServerLike]):
+
+    def __init__(self, ui_server: Optional[UISink]):
         self._ui_server = ui_server
 
-    def publish(self, event_type: str, **payload: Any) -> None:
+    def publish(self, event_type: str, **payload: object) -> None:
         if self._ui_server:
             self._ui_server.publish(event_type, **payload)
 
@@ -37,7 +37,7 @@ class RuntimeUIPublisher:
         state: str,
         *,
         message: Optional[str] = None,
-        **payload: Any,
+        **payload: object,
     ) -> None:
         if self._ui_server:
             self._ui_server.publish_state(state, message=message, **payload)
@@ -52,7 +52,7 @@ class RuntimeUIPublisher:
         tool_name: Optional[str] = None,
         motivation: Optional[str] = None,
     ) -> None:
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "action": action,
             "phase": snapshot.phase,
             "session": snapshot.session,
@@ -79,7 +79,7 @@ class RuntimeUIPublisher:
         tool_name: Optional[str] = None,
         message: Optional[str] = None,
     ) -> None:
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "action": action,
             "phase": snapshot.phase,
             "duration_seconds": snapshot.duration_seconds,

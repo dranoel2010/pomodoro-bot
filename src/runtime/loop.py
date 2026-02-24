@@ -5,27 +5,10 @@ from __future__ import annotations
 import concurrent.futures
 import datetime as dt
 import logging
-from dataclasses import dataclass
 from queue import Empty, Queue
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
-from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS
 from app_config import AppConfig
-from llm import EnvironmentContext, PomodoroAssistantLLM
-from oracle import OracleContextService
-from pomodoro import PomodoroTimer
-from pomodoro.constants import ACTION_SYNC, REASON_STARTUP
-from server import UIServer
-from stt import (
-    FasterWhisperSTT,
-    QueueEventPublisher,
-    UtteranceCapturedEvent,
-    WakeWordConfig,
-    WakeWordDetectedEvent,
-    WakeWordErrorEvent,
-    WakeWordService,
-)
-from tts import SpeechService
 from contracts.ui_protocol import (
     EVENT_ERROR,
     STATE_ERROR,
@@ -34,51 +17,66 @@ from contracts.ui_protocol import (
     STATE_THINKING,
     STATE_TRANSCRIBING,
 )
+from llm import EnvironmentContext, PomodoroAssistantLLM
+from oracle import OracleContextService
+from pomodoro import PomodoroTimer
+from pomodoro.constants import ACTION_SYNC, REASON_STARTUP
+from server import UIServer
+from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS
+from stt import (
+    FasterWhisperSTT,
+    QueueEventPublisher,
+    Utterance,
+    UtteranceCapturedEvent,
+    WakeWordConfig,
+    WakeWordDetectedEvent,
+    WakeWordErrorEvent,
+    WakeWordService,
+)
+from tts import SpeechService
 
-from .ticks import TickDependencies, TickProcessor
+from .ticks import handle_pomodoro_tick, handle_timer_tick
 from .tool_dispatch import RuntimeToolDispatcher
 from .ui import RuntimeUIPublisher
-from .utterance import UtteranceDependencies, UtteranceProcessor
+from .utterance import process_utterance
 
 
-@dataclass(frozen=True)
-class RuntimeHooks:
-    """Injectable lifecycle hooks used by runtime startup and shutdown flow."""
-    setup_signal_handlers: Callable[[WakeWordService], None]
-    wait_for_service_ready: Callable[[WakeWordService, float], bool]
+def _noop_signal_handlers(service: WakeWordService) -> None:
+    del service
 
 
-@dataclass(frozen=True)
-class RuntimeBootstrap:
-    """Dependency bundle required to construct the runtime engine."""
-    logger: logging.Logger
-    app_config: AppConfig
-    wake_word_config: WakeWordConfig
-    stt: FasterWhisperSTT
-    assistant_llm: Optional[PomodoroAssistantLLM]
-    speech_service: Optional[SpeechService]
-    oracle_service: Optional[OracleContextService]
-    ui_server: Optional[UIServer]
-    hooks: RuntimeHooks
-
-
-@dataclass
-class RuntimeResources:
-    """Mutable runtime resources created for the event loop lifecycle."""
-    event_queue: Queue[Any]
-    publisher: QueueEventPublisher
-    utterance_executor: concurrent.futures.ThreadPoolExecutor
-    pending_utterance: Optional[concurrent.futures.Future[None]] = None
-    wakeword_service: Optional[WakeWordService] = None
+def _wait_for_service_ready(service: WakeWordService, timeout: float) -> bool:
+    return service.wait_until_ready(timeout=timeout)
 
 
 class RuntimeEngine:
     """Main runtime loop that coordinates wake-word events and assistant flow."""
-    def __init__(self, bootstrap: RuntimeBootstrap):
-        self._bootstrap = bootstrap
-        self._logger = bootstrap.logger
 
-        self._ui = RuntimeUIPublisher(bootstrap.ui_server)
+    def __init__(
+        self,
+        *,
+        logger: logging.Logger,
+        app_config: AppConfig,
+        wake_word_config: WakeWordConfig,
+        stt: FasterWhisperSTT,
+        assistant_llm: Optional[PomodoroAssistantLLM] = None,
+        speech_service: Optional[SpeechService] = None,
+        oracle_service: Optional[OracleContextService] = None,
+        ui_server: Optional[UIServer] = None,
+        setup_signal_handlers: Callable[[WakeWordService], None] = _noop_signal_handlers,
+        wait_for_service_ready: Callable[[WakeWordService, float], bool] = _wait_for_service_ready,
+    ):
+        self._logger = logger
+        self._wake_word_config = wake_word_config
+        self._stt = stt
+        self._assistant_llm = assistant_llm
+        self._speech_service = speech_service
+        self._oracle_service = oracle_service
+        self._ui_server = ui_server
+        self._setup_signal_handlers = setup_signal_handlers
+        self._wait_for_service_ready = wait_for_service_ready
+
+        self._ui = RuntimeUIPublisher(ui_server)
         self._pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
         self._countdown_timer = PomodoroTimer(
             duration_seconds=DEFAULT_TIMER_DURATION_SECONDS,
@@ -86,85 +84,43 @@ class RuntimeEngine:
         )
         self._dispatcher = RuntimeToolDispatcher(
             logger=self._logger,
-            app_config=bootstrap.app_config,
-            oracle_service=bootstrap.oracle_service,
+            app_config=app_config,
+            oracle_service=oracle_service,
             pomodoro_timer=self._pomodoro_timer,
             countdown_timer=self._countdown_timer,
             ui=self._ui,
         )
 
-        self._tick_processor = TickProcessor(
-            TickDependencies(
-                speech_service=bootstrap.speech_service,
-                logger=self._logger,
-                ui=self._ui,
-                publish_idle_state=self._publish_idle_state,
-            )
+        self._event_queue: Queue[object] = Queue()
+        self._publisher = QueueEventPublisher(self._event_queue)
+        self._utterance_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="utterance",
         )
-        self._utterance_processor = UtteranceProcessor(
-            UtteranceDependencies(
-                stt=bootstrap.stt,
-                assistant_llm=bootstrap.assistant_llm,
-                speech_service=bootstrap.speech_service,
-                logger=self._logger,
-                ui=self._ui,
-                build_llm_environment_context=self._build_llm_environment_context,
-                handle_tool_call=self._dispatcher.handle_tool_call,
-                publish_idle_state=self._publish_idle_state,
-            )
-        )
-
-        event_queue: Queue[Any] = Queue()
-        self._resources = RuntimeResources(
-            event_queue=event_queue,
-            publisher=QueueEventPublisher(event_queue),
-            utterance_executor=concurrent.futures.ThreadPoolExecutor(
-                max_workers=1,
-                thread_name_prefix="utterance",
-            ),
-        )
+        self._pending_utterance: Optional[concurrent.futures.Future[None]] = None
+        self._wakeword_service: Optional[WakeWordService] = None
 
     def run(self) -> int:
-        self._publish_startup_sync()
-
         try:
-            self._resources.wakeword_service = WakeWordService(
-                config=self._bootstrap.wake_word_config,
-                publisher=self._resources.publisher,
-                logger=logging.getLogger("wake_word"),
-            )
-            wakeword_service = self._resources.wakeword_service
-
-            self._bootstrap.hooks.setup_signal_handlers(wakeword_service)
-
-            self._logger.info("Starting wake word service...")
-            wakeword_service.start()
-
-            self._logger.debug("Initializing wake word detection...")
-            if not self._bootstrap.hooks.wait_for_service_ready(
-                wakeword_service, timeout=10.0
-            ):
-                if not wakeword_service.is_running:
-                    self._logger.error("Service crashed during initialization.")
-                else:
-                    self._logger.error("Service initialization timed out.")
+            if not self._start_wakeword_service():
                 return 1
-
-            self._logger.info("Ready! Listening for wake word ...")
+            self._publish_startup_sync()
             self._publish_idle_state()
 
             while True:
-                self._finalize_pending_utterance()
+                if self._finalize_pending_utterance():
+                    return 1
                 self._emit_timer_ticks()
 
-                event, loop_exit = self._poll_event()
-                if loop_exit is not None:
-                    return loop_exit
+                event = self._poll_event()
                 if event is None:
-                    continue
+                    if self._wakeword_is_running():
+                        continue
+                    self._logger.error("Wake word service stopped unexpectedly")
+                    self._publish_runtime_error("Wake word service stopped unexpectedly")
+                    return 1
 
-                event_exit = self._handle_event(event)
-                if event_exit is not None:
+                if (event_exit := self._handle_event(event)) is not None:
                     return event_exit
 
         except KeyboardInterrupt:
@@ -183,24 +139,26 @@ class RuntimeEngine:
         )
 
     def _build_llm_environment_context(self) -> EnvironmentContext:
-        payload = {
-            "now_local": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-            "light_level_lux": None,
-            "air_quality": None,
-            "upcoming_events": None,
-        }
-        oracle_service = self._bootstrap.oracle_service
-        if oracle_service is not None:
+        now_local = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+        light_level_lux = None
+        air_quality = None
+        upcoming_events = None
+
+        if self._oracle_service is not None:
             try:
-                payload.update(oracle_service.build_environment_payload())
+                payload = self._oracle_service.build_environment_payload()
+                now_local = str(payload.get("now_local") or now_local)
+                light_level_lux = payload.get("light_level_lux")
+                air_quality = payload.get("air_quality")
+                upcoming_events = payload.get("upcoming_events")
             except Exception as error:
                 self._logger.warning("Failed to collect oracle context: %s", error)
 
         return EnvironmentContext(
-            now_local=payload["now_local"],
-            light_level_lux=payload.get("light_level_lux"),
-            air_quality=payload.get("air_quality"),
-            upcoming_events=payload.get("upcoming_events"),
+            now_local=now_local,
+            light_level_lux=light_level_lux,
+            air_quality=air_quality,
+            upcoming_events=upcoming_events,
         )
 
     def _publish_startup_sync(self) -> None:
@@ -217,51 +175,82 @@ class RuntimeEngine:
             reason=REASON_STARTUP,
         )
 
-    def _finalize_pending_utterance(self) -> None:
-        pending = self._resources.pending_utterance
-        if pending is None or not pending.done():
-            return
+    def _start_wakeword_service(self) -> bool:
+        self._wakeword_service = WakeWordService(
+            config=self._wake_word_config,
+            publisher=self._publisher,
+            logger=logging.getLogger("wake_word"),
+        )
+        wakeword_service = self._wakeword_service
+        self._setup_signal_handlers(wakeword_service)
 
+        self._logger.info("Starting wake word service...")
+        wakeword_service.start()
+
+        self._logger.debug("Initializing wake word detection...")
+        if self._wait_for_service_ready(wakeword_service, timeout=10.0):
+            self._logger.info("Ready! Listening for wake word ...")
+            return True
+
+        if wakeword_service.is_running:
+            self._logger.error("Service initialization timed out.")
+        else:
+            self._logger.error("Service crashed during initialization.")
+        return False
+
+    def _wakeword_is_running(self) -> bool:
+        wakeword_service = self._wakeword_service
+        return wakeword_service is not None and wakeword_service.is_running
+
+    def _publish_runtime_error(self, message: str) -> None:
+        self._ui.publish(
+            EVENT_ERROR,
+            state=STATE_ERROR,
+            message=message,
+        )
+
+    def _finalize_pending_utterance(self) -> bool:
+        pending = self._pending_utterance
+        if pending is None or not pending.done():
+            return False
+
+        self._pending_utterance = None
         try:
             pending.result()
         except Exception as error:
             self._logger.error("Utterance worker failed: %s", error, exc_info=True)
-            self._ui.publish(
-                EVENT_ERROR,
-                state=STATE_ERROR,
-                message=f"Utterance worker failed: {error}",
-            )
-            self._publish_idle_state()
-        finally:
-            self._resources.pending_utterance = None
+            self._publish_runtime_error(f"Utterance worker failed: {error}")
+            return True
+        return False
 
     def _emit_timer_ticks(self) -> None:
         pomodoro_tick = self._pomodoro_timer.poll()
         if pomodoro_tick is not None:
-            self._tick_processor.handle_pomodoro_tick(pomodoro_tick)
+            handle_pomodoro_tick(
+                pomodoro_tick,
+                speech_service=self._speech_service,
+                logger=self._logger,
+                ui=self._ui,
+                publish_idle_state=self._publish_idle_state,
+            )
 
         timer_tick = self._countdown_timer.poll()
         if timer_tick is not None:
-            self._tick_processor.handle_timer_tick(timer_tick)
+            handle_timer_tick(
+                timer_tick,
+                speech_service=self._speech_service,
+                logger=self._logger,
+                ui=self._ui,
+                publish_idle_state=self._publish_idle_state,
+            )
 
-    def _poll_event(self) -> tuple[Optional[Any], Optional[int]]:
+    def _poll_event(self) -> Optional[object]:
         try:
-            return self._resources.event_queue.get(timeout=0.25), None
+            return self._event_queue.get(timeout=0.25)
         except Empty:
-            wakeword_service = self._resources.wakeword_service
-            if wakeword_service is None:
-                return None, 1
-            if not wakeword_service.is_running:
-                self._logger.error("Service stopped unexpectedly")
-                self._ui.publish(
-                    EVENT_ERROR,
-                    state=STATE_ERROR,
-                    message="Wake word service stopped unexpectedly",
-                )
-                return None, 1
-            return None, None
+            return None
 
-    def _submit_utterance(self, utterance: Any) -> None:
+    def _submit_utterance(self, utterance: Utterance) -> None:
         self._ui.publish_state(
             STATE_TRANSCRIBING,
             message="Transcribing utterance",
@@ -269,21 +258,25 @@ class RuntimeEngine:
             audio_bytes=len(utterance.audio_bytes),
         )
         try:
-            self._resources.pending_utterance = self._resources.utterance_executor.submit(
-                self._utterance_processor.process,
+            self._pending_utterance = self._utterance_executor.submit(
+                process_utterance,
                 utterance,
+                stt=self._stt,
+                assistant_llm=self._assistant_llm,
+                speech_service=self._speech_service,
+                logger=self._logger,
+                ui=self._ui,
+                build_llm_environment_context=self._build_llm_environment_context,
+                handle_tool_call=self._dispatcher.handle_tool_call,
+                publish_idle_state=self._publish_idle_state,
             )
         except Exception as error:
             self._logger.error("Failed to submit utterance task: %s", error)
-            self._ui.publish(
-                EVENT_ERROR,
-                state=STATE_ERROR,
-                message=f"Failed to submit utterance task: {error}",
-            )
+            self._publish_runtime_error(f"Failed to submit utterance task: {error}")
             self._publish_idle_state()
-            self._resources.pending_utterance = None
+            self._pending_utterance = None
 
-    def _handle_event(self, event: Any) -> Optional[int]:
+    def _handle_event(self, event: object) -> Optional[int]:
         if isinstance(event, WakeWordDetectedEvent):
             self._logger.info("Wake word detected at %s", event.occurred_at.isoformat())
             self._ui.publish_state(STATE_LISTENING, message="Wake word detected")
@@ -297,7 +290,7 @@ class RuntimeEngine:
                 utterance.duration_seconds,
                 len(utterance.audio_bytes),
             )
-            pending = self._resources.pending_utterance
+            pending = self._pending_utterance
             if pending is not None and not pending.done():
                 self._logger.warning(
                     "Skipping utterance while previous request is still processing."
@@ -317,11 +310,7 @@ class RuntimeEngine:
                 event.message,
                 exc_info=event.exception,
             )
-            self._ui.publish(
-                EVENT_ERROR,
-                state=STATE_ERROR,
-                message=f"WakeWordErrorEvent: {event.message}",
-            )
+            self._publish_runtime_error(f"WakeWordErrorEvent: {event.message}")
             return 1
 
         self._logger.warning("Ignoring unknown event type: %s", type(event).__name__)
@@ -329,9 +318,9 @@ class RuntimeEngine:
 
     def _shutdown(self) -> None:
         self._logger.info("Stopping utterance executor...")
-        self._resources.utterance_executor.shutdown(wait=False, cancel_futures=True)
+        self._utterance_executor.shutdown(wait=False, cancel_futures=True)
 
-        wakeword_service = self._resources.wakeword_service
+        wakeword_service = self._wakeword_service
         if wakeword_service is not None:
             self._logger.info("Stopping service...")
             try:
@@ -339,10 +328,9 @@ class RuntimeEngine:
             except Exception as error:
                 self._logger.error("Error stopping service: %s", error, exc_info=True)
 
-        ui_server = self._bootstrap.ui_server
-        if ui_server is not None:
+        if self._ui_server is not None:
             self._logger.info("Stopping UI server...")
             try:
-                ui_server.stop(timeout_seconds=5.0)
+                self._ui_server.stop(timeout_seconds=5.0)
             except Exception as error:
                 self._logger.error("Error stopping UI server: %s", error, exc_info=True)

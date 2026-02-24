@@ -34,7 +34,7 @@ class STTSettings:
     model_size: str = "base"
     device: str = "cpu"
     compute_type: str = "int8"
-    language: Optional[str] = "en"
+    language: Optional[str] = "de"
     beam_size: int = 5
     vad_filter: bool = True
     cpu_cores: tuple[int, ...] = ()
@@ -62,6 +62,7 @@ class LLMSettings:
     hf_repo_id: str = ""
     hf_revision: str = ""
     system_prompt: str = ""
+    max_tokens: Optional[int] = None
     n_threads: int = 4
     n_ctx: int = 2048
     n_batch: int = 256

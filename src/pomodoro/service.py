@@ -39,7 +39,7 @@ PomodoroPhase = Literal["idle", "running", "paused", "completed", "aborted"]
 PomodoroAction = Literal["start", "pause", "continue", "abort", "reset"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PomodoroSnapshot:
     """Immutable timer snapshot exposed to runtime and UI publishers."""
     phase: PomodoroPhase
@@ -47,12 +47,7 @@ class PomodoroSnapshot:
     duration_seconds: int
     remaining_seconds: int
 
-    @property
-    def is_active(self) -> bool:
-        return self.phase in ACTIVE_PHASES
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PomodoroActionResult:
     """Result envelope returned after applying a timer or pomodoro action."""
     action: PomodoroAction
@@ -61,7 +56,7 @@ class PomodoroActionResult:
     snapshot: PomodoroSnapshot
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PomodoroTick:
     """Tick payload emitted while countdown timers are running."""
     snapshot: PomodoroSnapshot
@@ -80,8 +75,7 @@ class PomodoroTimer:
         if duration_seconds <= 0:
             raise ValueError("duration_seconds must be greater than zero")
 
-        self._default_duration_seconds = int(duration_seconds)
-        self._duration_seconds = self._default_duration_seconds
+        self._duration_seconds = int(duration_seconds)
         self._logger = logger or logging.getLogger("pomodoro")
         self._lock = threading.Lock()
 
@@ -179,13 +173,11 @@ class PomodoroTimer:
             now = time.monotonic()
             remaining = self._running_remaining_locked(now)
             if remaining <= 0:
-                if self._phase != PHASE_COMPLETED:
-                    self._phase = PHASE_COMPLETED
-                    self._terminal_remaining_seconds = 0
-                    self._last_emitted_remaining = 0
-                    self._logger.info("Pomodoro completed: session=%s", self._session)
-                    return PomodoroTick(snapshot=self._snapshot_locked(now), completed=True)
-                return None
+                self._phase = PHASE_COMPLETED
+                self._terminal_remaining_seconds = 0
+                self._last_emitted_remaining = 0
+                self._logger.info("Pomodoro completed: session=%s", self._session)
+                return PomodoroTick(snapshot=self._snapshot_locked(now), completed=True)
 
             if self._last_emitted_remaining == remaining:
                 return None

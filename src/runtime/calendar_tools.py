@@ -5,9 +5,9 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
-from spoken_time import format_spoken_clock
+from shared.spoken_time import format_spoken_clock
 
 from shared.defaults import (
     DEFAULT_CALENDAR_EVENT_DURATION_SECONDS,
@@ -15,10 +15,12 @@ from shared.defaults import (
 )
 from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_EVENTS
 
-from .contracts import AppConfigLike, CalendarOracleLike
+if TYPE_CHECKING:
+    from app_config import AppConfig
+    from oracle import OracleContextService
 
 
-def parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
+def parse_duration_seconds(value: object, *, default_seconds: int) -> int:
     """Parse duration inputs and return a positive value in seconds."""
     if isinstance(value, (int, float)) and int(value) > 0:
         return int(value) * 60
@@ -41,7 +43,7 @@ def parse_duration_seconds(value: Any, *, default_seconds: int) -> int:
     return default_seconds
 
 
-def parse_calendar_datetime(value: Any) -> Optional[dt.datetime]:
+def parse_calendar_datetime(value: object) -> Optional[dt.datetime]:
     """Parse ISO or German date-time strings into timezone-aware datetimes."""
     if not isinstance(value, str):
         return None
@@ -138,7 +140,7 @@ def format_calendar_datetime_natural(
 
 
 def format_calendar_value_natural(
-    value: Any,
+    value: object,
     *,
     now: Optional[dt.datetime] = None,
 ) -> Optional[str]:
@@ -201,9 +203,9 @@ def calendar_window_end(time_range: str) -> dt.datetime:
 def handle_calendar_tool_call(
     *,
     tool_name: str,
-    arguments: dict[str, Any],
-    oracle_service: Optional[CalendarOracleLike],
-    app_config: AppConfigLike,
+    arguments: dict[str, object],
+    oracle_service: Optional["OracleContextService"],
+    app_config: "AppConfig",
     logger: logging.Logger,
 ) -> str:
     """Execute calendar tool calls and return user-facing German responses."""
@@ -218,33 +220,27 @@ def handle_calendar_tool_call(
             )
             now = dt.datetime.now().astimezone()
             window_end = calendar_window_end(time_range)
+            max_results = app_config.oracle.google_calendar_max_results
             events = oracle_service.list_upcoming_events(
-                max_results=app_config.oracle.google_calendar_max_results * 2,
+                max_results=max_results * 2,
                 time_min=now,
             )
-
-            filtered: list[dict[str, Any]] = []
-            for event in events:
-                start_raw = event.get("start")
-                if not isinstance(start_raw, str):
-                    continue
-                parsed_start = parse_calendar_datetime(start_raw)
-                if parsed_start is None:
-                    continue
-                if parsed_start <= window_end:
-                    filtered.append(event)
+            filtered = [
+                event
+                for event in events
+                if isinstance(start_raw := event.get("start"), str)
+                and (parsed_start := parse_calendar_datetime(start_raw)) is not None
+                and parsed_start <= window_end
+            ]
 
             if not filtered:
                 return f"Es gibt keine anstehenden Termine fuer {time_range}."
 
-            top = filtered[: app_config.oracle.google_calendar_max_results]
-            parts = []
-            for item in top:
-                summary = str(item.get("summary") or "Ohne Titel")
-                start_text = format_calendar_value_natural(item.get("start"), now=now)
-                if start_text is None:
-                    start_text = str(item.get("start") or "ohne Zeit")
-                parts.append(f"{summary} ({start_text})")
+            parts = [
+                f"{str(item.get('summary') or 'Ohne Titel')} "
+                f"({format_calendar_value_natural(item.get('start'), now=now) or str(item.get('start') or 'ohne Zeit')})"
+                for item in filtered[:max_results]
+            ]
             return "Anstehende Termine: " + "; ".join(parts) + "."
 
         if tool_name == TOOL_ADD_CALENDAR_EVENT:
@@ -259,9 +255,7 @@ def handle_calendar_tool_call(
                 return "Ich konnte den Termin nicht anlegen, weil die Startzeit fehlt oder ungueltig ist."
             if not title:
                 return "Ich konnte den Termin nicht anlegen, weil der Titel fehlt."
-            if end_time is None:
-                end_time = start_time + dt.timedelta(seconds=duration_seconds)
-            if end_time <= start_time:
+            if end_time is None or end_time <= start_time:
                 end_time = start_time + dt.timedelta(seconds=duration_seconds)
 
             event_id = oracle_service.add_event(

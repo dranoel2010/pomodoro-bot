@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 from .config import OracleConfig
 from .contracts import OracleProviders
@@ -29,9 +29,9 @@ class OracleContextService:
         self._monotonic = monotonic_fn or time.monotonic
         self._now = now_fn or (lambda: datetime.now().astimezone())
 
-        self._sensor_cache: Dict[str, Any] = {}
+        self._sensor_cache: dict[str, object] = {}
         self._sensor_cache_at: float = 0.0
-        self._calendar_cache: Optional[list[dict[str, Any]]] = None
+        self._calendar_cache: Optional[list[dict[str, object]]] = None
         self._calendar_cache_at: float = 0.0
 
         provider_bundle = providers or build_oracle_providers(
@@ -42,13 +42,9 @@ class OracleContextService:
         self._temt6000 = provider_bundle.temt6000
         self._calendar = provider_bundle.calendar
 
-    @property
-    def is_enabled(self) -> bool:
-        return self._config.enabled
-
-    def build_environment_payload(self) -> Dict[str, Any]:
+    def build_environment_payload(self) -> dict[str, object]:
         """Return fields usable by llm.EnvironmentContext."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, object] = {
             "now_local": self._now().isoformat(timespec="seconds"),
         }
 
@@ -67,7 +63,7 @@ class OracleContextService:
 
         return payload
 
-    def _read_sensors_with_cache(self) -> Dict[str, Any]:
+    def _read_sensors_with_cache(self) -> dict[str, object]:
         now = self._monotonic()
         if (
             self._sensor_cache
@@ -75,7 +71,7 @@ class OracleContextService:
         ):
             return self._sensor_cache
 
-        result: Dict[str, Any] = {
+        result: dict[str, object] = {
             "light_level_lux": None,
             "air_quality": None,
         }
@@ -97,7 +93,7 @@ class OracleContextService:
         self._sensor_cache_at = now
         return result
 
-    def _read_calendar_with_cache(self) -> Optional[list[dict[str, Any]]]:
+    def _read_calendar_with_cache(self) -> Optional[list[dict[str, object]]]:
         if self._calendar is None:
             return None
 
@@ -125,7 +121,7 @@ class OracleContextService:
         *,
         max_results: Optional[int] = None,
         time_min: Optional[datetime] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         if self._calendar is None:
             raise RuntimeError("Google Calendar integration is not available.")
 

@@ -11,6 +11,7 @@ from .events import (
     WakeWordErrorEvent,
     WakeWordEvent,
 )
+from .factory import create_stt_client
 from .stt import (
     FasterWhisperSTT,
     StreamingFasterWhisperSTT,
@@ -41,6 +42,7 @@ __all__ = [
     "STTError",
     "TranscriptionResult",
     "STTConfig",
+    "create_stt_client",
     # Service
     "WakeWordService",
 ]

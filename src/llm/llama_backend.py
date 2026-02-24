@@ -1,5 +1,6 @@
 """llama.cpp backend wrapper with constrained JSON grammar output."""
 
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from contracts.tool_contract import tool_name_gbnf_alternatives
@@ -29,6 +30,18 @@ ws ::= ([ \t\n\r])*
 """.strip()
 
 
+@dataclass(frozen=True, slots=True)
+class CompletionUsage:
+    finish_reason: Optional[str]
+    prompt_tokens: Optional[int]
+    completion_tokens: Optional[int]
+    total_tokens: Optional[int]
+    derived_completion_tokens: Optional[int]
+    accounting_consistent: Optional[bool]
+    accounting_delta: Optional[int]
+    raw_usage: Optional[dict[str, object]]
+
+
 def build_gbnf_schema() -> str:
     """Build the runtime GBNF schema with current canonical tool names."""
     return GBNF_SCHEMA_TEMPLATE.replace(
@@ -55,6 +68,7 @@ class LlamaBackend:
         self._last_prompt_tokens: Optional[int] = None
         self._last_completion_tokens: Optional[int] = None
         self._last_total_tokens: Optional[int] = None
+        self._last_usage: Optional[CompletionUsage] = None
 
     def complete(self, messages: list[dict[str, str]], max_tokens: int) -> str:
         response: dict[str, Any] = self._llm.create_chat_completion(
@@ -73,13 +87,30 @@ class LlamaBackend:
 
         usage = response.get("usage")
         if isinstance(usage, dict):
-            self._last_prompt_tokens = _as_int(usage.get("prompt_tokens"))
-            self._last_completion_tokens = _as_int(usage.get("completion_tokens"))
-            self._last_total_tokens = _as_int(usage.get("total_tokens"))
+            prompt_tokens = _as_int(usage.get("prompt_tokens"))
+            completion_tokens = _as_int(usage.get("completion_tokens"))
+            total_tokens = _as_int(usage.get("total_tokens"))
+            usage_raw = {
+                key: value
+                for key, value in usage.items()
+                if isinstance(key, str)
+            }
         else:
-            self._last_prompt_tokens = None
-            self._last_completion_tokens = None
-            self._last_total_tokens = None
+            prompt_tokens = None
+            completion_tokens = None
+            total_tokens = None
+            usage_raw = None
+
+        self._last_prompt_tokens = prompt_tokens
+        self._last_completion_tokens = completion_tokens
+        self._last_total_tokens = total_tokens
+        self._last_usage = _build_completion_usage(
+            finish_reason=self._last_finish_reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            raw_usage=usage_raw,
+        )
 
         return choice["message"]["content"]
 
@@ -98,6 +129,47 @@ class LlamaBackend:
     @property
     def last_total_tokens(self) -> Optional[int]:
         return self._last_total_tokens
+
+    @property
+    def last_usage(self) -> Optional[CompletionUsage]:
+        return self._last_usage
+
+
+def _build_completion_usage(
+    *,
+    finish_reason: Optional[str],
+    prompt_tokens: Optional[int],
+    completion_tokens: Optional[int],
+    total_tokens: Optional[int],
+    raw_usage: Optional[dict[str, object]],
+) -> CompletionUsage:
+    derived_completion_tokens: Optional[int] = None
+    if (
+        isinstance(total_tokens, int)
+        and isinstance(prompt_tokens, int)
+    ):
+        derived_completion_tokens = total_tokens - prompt_tokens
+
+    accounting_consistent: Optional[bool] = None
+    accounting_delta: Optional[int] = None
+    if (
+        isinstance(total_tokens, int)
+        and isinstance(prompt_tokens, int)
+        and isinstance(completion_tokens, int)
+    ):
+        accounting_delta = total_tokens - (prompt_tokens + completion_tokens)
+        accounting_consistent = accounting_delta == 0
+
+    return CompletionUsage(
+        finish_reason=finish_reason,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        derived_completion_tokens=derived_completion_tokens,
+        accounting_consistent=accounting_consistent,
+        accounting_delta=accounting_delta,
+        raw_usage=raw_usage,
+    )
 
 
 def _as_int(value: Any) -> Optional[int]:
