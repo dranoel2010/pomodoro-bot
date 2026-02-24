@@ -7,6 +7,7 @@ import multiprocessing
 import signal
 import sys
 import time
+from logging.handlers import QueueListener
 from typing import Any, Optional
 
 from contracts.ui_protocol import STATE_IDLE
@@ -20,8 +21,10 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     """Configure logging for the application."""
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s.%(msecs)03d [%(levelname)s] [%(processName)s:%(process)d] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,
     )
     return logging.getLogger("wake_word_app")
 
@@ -84,6 +87,8 @@ def _initialize_stt(
     *,
     app_config: Any,
     secret_config: Any,
+    worker_log_queue: Optional[Any],
+    worker_log_level: int,
 ) -> tuple[Any, Any]:
     try:
         from stt import (
@@ -109,6 +114,8 @@ def _initialize_stt(
             config=stt_config,
             cpu_cores=app_config.stt.cpu_cores,
             logger=logging.getLogger("stt.process"),
+            log_queue=worker_log_queue,
+            log_level=worker_log_level,
         )
     except Exception as error:
         raise StartupError(f"STT initialization error: {error}") from error
@@ -120,6 +127,8 @@ def _initialize_tts(
     *,
     app_config: Any,
     logger: logging.Logger,
+    worker_log_queue: Optional[Any],
+    worker_log_level: int,
 ) -> Optional[Any]:
     if not app_config.tts.enabled:
         return None
@@ -136,6 +145,8 @@ def _initialize_tts(
             config=tts_config,
             cpu_cores=app_config.tts.cpu_cores,
             logger=logging.getLogger("tts.process"),
+            log_queue=worker_log_queue,
+            log_level=worker_log_level,
         )
     except TTSConfigurationError as error:
         raise StartupError(f"TTS initialization error: {error}") from error
@@ -152,6 +163,8 @@ def _initialize_llm(
     secret_config: Any,
     speech_service: Optional[Any],
     logger: logging.Logger,
+    worker_log_queue: Optional[Any],
+    worker_log_level: int,
 ) -> Optional[Any]:
     if not app_config.llm.enabled:
         if speech_service is not None:
@@ -187,6 +200,8 @@ def _initialize_llm(
             config=llm_config,
             cpu_cores=app_config.llm.cpu_cores,
             logger=logging.getLogger("llm.process"),
+            log_queue=worker_log_queue,
+            log_level=worker_log_level,
         )
     except Exception as error:
         raise StartupError(f"LLM initialization error: {error}") from error
@@ -311,28 +326,47 @@ def _close_resource(
         logger.error("Failed to close %s: %s", resource_name, error)
 
 
+def _start_worker_log_listener() -> tuple[Any, QueueListener]:
+    spawn_context = multiprocessing.get_context("spawn")
+    log_queue: Any = spawn_context.Queue()
+    handlers = list(logging.getLogger().handlers)
+    listener = QueueListener(log_queue, *handlers, respect_handler_level=True)
+    listener.start()
+    return log_queue, listener
+
+
 def main() -> int:
     """Run the wake-word assistant runtime."""
     logger = setup_logging(level=logging.INFO)
     stt: Optional[Any] = None
     speech_service: Optional[Any] = None
     assistant_llm: Optional[Any] = None
+    worker_log_queue: Optional[Any] = None
+    worker_log_listener: Optional[QueueListener] = None
 
     try:
+        worker_log_level = logging.getLogger().getEffectiveLevel()
+        worker_log_queue, worker_log_listener = _start_worker_log_listener()
         app_config, secret_config = _load_runtime_config(logger)
         wake_word_config, stt = _initialize_stt(
             app_config=app_config,
             secret_config=secret_config,
+            worker_log_queue=worker_log_queue,
+            worker_log_level=worker_log_level,
         )
         speech_service = _initialize_tts(
             app_config=app_config,
             logger=logger,
+            worker_log_queue=worker_log_queue,
+            worker_log_level=worker_log_level,
         )
         assistant_llm = _initialize_llm(
             app_config=app_config,
             secret_config=secret_config,
             speech_service=speech_service,
             logger=logger,
+            worker_log_queue=worker_log_queue,
+            worker_log_level=worker_log_level,
         )
         oracle_service = _initialize_oracle_context(
             app_config=app_config,
@@ -370,6 +404,8 @@ def main() -> int:
             resource_name="STT process client",
             logger=logger,
         )
+        if worker_log_listener is not None:
+            worker_log_listener.stop()
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import queue
 import threading
+from logging.handlers import QueueHandler
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
@@ -20,6 +21,21 @@ _INIT_ERROR = "init_error"
 _OK = "ok"
 _ERROR = "error"
 _SHUTDOWN = "__shutdown__"
+
+
+def _configure_worker_logging(
+    *,
+    log_queue: Optional[multiprocessing.Queue[Any]],
+    log_level: int,
+) -> None:
+    if log_queue is None:
+        return
+
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.setLevel(log_level)
+    root_logger.addHandler(QueueHandler(log_queue))
 
 
 def _set_process_cpu_affinity(
@@ -62,6 +78,8 @@ class _DedicatedProcessWorker:
         target_args: tuple[Any, ...],
         logger: logging.Logger,
         startup_timeout_seconds: float = 30.0,
+        log_queue: Optional[multiprocessing.Queue[Any]] = None,
+        log_level: int = logging.INFO,
     ):
         self._name = name
         self._logger = logger
@@ -74,7 +92,13 @@ class _DedicatedProcessWorker:
         self._process = ctx.Process(
             name=name,
             target=target,
-            args=(self._request_queue, self._response_queue, *target_args),
+            args=(
+                self._request_queue,
+                self._response_queue,
+                log_queue,
+                log_level,
+                *target_args,
+            ),
             daemon=True,
         )
         self._process.start()
@@ -151,6 +175,8 @@ class ProcessSTTClient:
         config: "STTConfig",
         cpu_cores: tuple[int, ...] = (),
         logger: Optional[logging.Logger] = None,
+        log_queue: Optional[multiprocessing.Queue[Any]] = None,
+        log_level: int = logging.INFO,
     ):
         self._logger = logger or logging.getLogger("stt.process")
         self._worker = _DedicatedProcessWorker(
@@ -158,6 +184,8 @@ class ProcessSTTClient:
             target=_stt_worker_main,
             target_args=(config, cpu_cores),
             logger=self._logger,
+            log_queue=log_queue,
+            log_level=log_level,
         )
 
     def transcribe(self, utterance: "Utterance") -> "TranscriptionResult":
@@ -181,6 +209,8 @@ class ProcessLLMClient:
         config: "LLMConfig",
         cpu_cores: tuple[int, ...] = (),
         logger: Optional[logging.Logger] = None,
+        log_queue: Optional[multiprocessing.Queue[Any]] = None,
+        log_level: int = logging.INFO,
     ):
         self._logger = logger or logging.getLogger("llm.process")
         self._worker = _DedicatedProcessWorker(
@@ -188,6 +218,8 @@ class ProcessLLMClient:
             target=_llm_worker_main,
             target_args=(config, cpu_cores),
             logger=self._logger,
+            log_queue=log_queue,
+            log_level=log_level,
         )
 
     def run(
@@ -219,6 +251,8 @@ class ProcessTTSClient:
         config: "TTSConfig",
         cpu_cores: tuple[int, ...] = (),
         logger: Optional[logging.Logger] = None,
+        log_queue: Optional[multiprocessing.Queue[Any]] = None,
+        log_level: int = logging.INFO,
     ):
         self._logger = logger or logging.getLogger("tts.process")
         self._worker = _DedicatedProcessWorker(
@@ -226,6 +260,8 @@ class ProcessTTSClient:
             target=_tts_worker_main,
             target_args=(config, cpu_cores),
             logger=self._logger,
+            log_queue=log_queue,
+            log_level=log_level,
         )
 
     def speak(self, text: str) -> None:
@@ -243,9 +279,12 @@ class ProcessTTSClient:
 def _stt_worker_main(
     request_queue: multiprocessing.Queue[Any],
     response_queue: multiprocessing.Queue[Any],
+    log_queue: Optional[multiprocessing.Queue[Any]],
+    log_level: int,
     config: "STTConfig",
     cpu_cores: tuple[int, ...],
 ) -> None:
+    _configure_worker_logging(log_queue=log_queue, log_level=log_level)
     logger = logging.getLogger("stt.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 
@@ -279,11 +318,14 @@ def _stt_worker_main(
 def _llm_worker_main(
     request_queue: multiprocessing.Queue[Any],
     response_queue: multiprocessing.Queue[Any],
+    log_queue: Optional[multiprocessing.Queue[Any]],
+    log_level: int,
     config: "LLMConfig",
     cpu_cores: tuple[int, ...],
 ) -> None:
     from dataclasses import replace
 
+    _configure_worker_logging(log_queue=log_queue, log_level=log_level)
     logger = logging.getLogger("llm.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 
@@ -324,9 +366,12 @@ def _llm_worker_main(
 def _tts_worker_main(
     request_queue: multiprocessing.Queue[Any],
     response_queue: multiprocessing.Queue[Any],
+    log_queue: Optional[multiprocessing.Queue[Any]],
+    log_level: int,
     config: "TTSConfig",
     cpu_cores: tuple[int, ...],
 ) -> None:
+    _configure_worker_logging(log_queue=log_queue, log_level=log_level)
     logger = logging.getLogger("tts.worker")
     _set_process_cpu_affinity(cpu_cores, logger=logger)
 

@@ -114,6 +114,7 @@ UI selection settings:
 
 CPU pinning settings:
 - `stt.cpu_cores`, `llm.cpu_cores`, `tts.cpu_cores`: optional integer arrays used to pin dedicated worker processes to specific CPU cores.
+- STT/LLM/TTS worker logs are forwarded to the main process logger output (stdout).
 
 Required first edit in `config.toml`:
 - `wake_word.ppn_file`
