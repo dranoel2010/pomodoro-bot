@@ -36,6 +36,7 @@ class STTSettings:
     language: str | None = "de"
     beam_size: int = 5
     vad_filter: bool = True
+    cpu_threads: int = 0
     cpu_cores: tuple[int, ...] = ()
 
 
@@ -63,12 +64,21 @@ class LLMSettings:
     system_prompt: str = ""
     max_tokens: int | None = None
     n_threads: int = 4
+    n_threads_batch: int | None = None
     n_ctx: int = 2048
     n_batch: int = 256
+    n_ubatch: int | None = None
     temperature: float = 0.2
     top_p: float = 0.9
+    top_k: int = 40
+    min_p: float = 0.05
     repeat_penalty: float = 1.1
+    use_mmap: bool = True
+    use_mlock: bool = False
     verbose: bool = False
+    fast_path_enabled: bool = True
+    cpu_affinity_mode: str = "pinned"
+    shared_cpu_reserve_cores: int = 1
     cpu_cores: tuple[int, ...] = ()
 
 

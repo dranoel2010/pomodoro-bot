@@ -111,6 +111,7 @@ def _init_stt_worker(
         language=config.language,
         beam_size=config.beam_size,
         vad_filter=config.vad_filter,
+        cpu_threads=config.cpu_threads,
         logger=logger,
     )
 
@@ -255,17 +256,63 @@ def _llm_config_for_worker(
     config: "LLMConfig",
     *,
     cpu_cores: tuple[int, ...],
+    cpu_affinity_mode: str,
+    shared_cpu_reserve_cores: int,
     logger: logging.Logger,
-) -> "LLMConfig":
-    if not cpu_cores or config.n_threads <= len(cpu_cores):
-        return config
+) -> tuple["LLMConfig", tuple[int, ...]]:
+    mode = (cpu_affinity_mode or "pinned").strip().lower()
+    if mode not in {"pinned", "shared"}:
+        raise RuntimeError(
+            f"Unsupported llm.cpu_affinity_mode={cpu_affinity_mode!r}; expected 'pinned' or 'shared'."
+        )
 
-    adjusted = replace(config, n_threads=len(cpu_cores))
-    logger.info(
-        "Adjusted llm.n_threads to %d to match assigned CPU cores",
-        len(cpu_cores),
-    )
-    return adjusted
+    if mode == "shared":
+        reserve = max(0, shared_cpu_reserve_cores)
+        cpu_count = max(1, os.cpu_count() or config.n_threads)
+        usable_cores = max(1, cpu_count - reserve)
+        adjusted = config
+        if adjusted.n_threads > usable_cores:
+            adjusted = replace(adjusted, n_threads=usable_cores)
+            logger.info(
+                "Adjusted llm.n_threads to %d for shared affinity mode (cpu_count=%d reserve=%d)",
+                usable_cores,
+                cpu_count,
+                reserve,
+            )
+        if (
+            adjusted.n_threads_batch is not None
+            and adjusted.n_threads_batch > usable_cores
+        ):
+            adjusted = replace(adjusted, n_threads_batch=usable_cores)
+            logger.info(
+                "Adjusted llm.n_threads_batch to %d for shared affinity mode",
+                usable_cores,
+            )
+        logger.info(
+            "LLM worker running in shared affinity mode: process is unpinned and may borrow idle CPU cores."
+        )
+        return adjusted, ()
+
+    if not cpu_cores:
+        return config, ()
+
+    adjusted = config
+    if adjusted.n_threads > len(cpu_cores):
+        adjusted = replace(adjusted, n_threads=len(cpu_cores))
+        logger.info(
+            "Adjusted llm.n_threads to %d to match assigned CPU cores",
+            len(cpu_cores),
+        )
+    if (
+        adjusted.n_threads_batch is not None
+        and adjusted.n_threads_batch > len(cpu_cores)
+    ):
+        adjusted = replace(adjusted, n_threads_batch=len(cpu_cores))
+        logger.info(
+            "Adjusted llm.n_threads_batch to %d to match assigned CPU cores",
+            len(cpu_cores),
+        )
+    return adjusted, cpu_cores
 
 
 class ProcessSTTClient:
@@ -305,19 +352,25 @@ class ProcessLLMClient:
         *,
         config: "LLMConfig",
         cpu_cores: tuple[int, ...] = (),
+        cpu_affinity_mode: str = "pinned",
+        shared_cpu_reserve_cores: int = 1,
         logger: logging.Logger | None = None,
         log_queue: multiprocessing.Queue[object] | None = None,
         log_level: int = logging.INFO,
     ):
         worker_logger = logger or logging.getLogger("llm.process")
-        llm_config = _llm_config_for_worker(
-            config, cpu_cores=cpu_cores, logger=worker_logger
+        llm_config, worker_cpu_cores = _llm_config_for_worker(
+            config,
+            cpu_cores=cpu_cores,
+            cpu_affinity_mode=cpu_affinity_mode,
+            shared_cpu_reserve_cores=shared_cpu_reserve_cores,
+            logger=worker_logger,
         )
         self._worker = _ProcessWorker(
             name="llm-worker",
             task=_llm_task,
             initializer=_init_llm_worker,
-            init_args=(llm_config, cpu_cores, log_queue, log_level),
+            init_args=(llm_config, worker_cpu_cores, log_queue, log_level),
             logger=worker_logger,
         )
 

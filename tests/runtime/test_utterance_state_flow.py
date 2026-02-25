@@ -158,6 +158,7 @@ class UtteranceStateFlowTests(unittest.TestCase):
             build_llm_environment_context=lambda: object(),
             handle_tool_call=lambda tool_call, assistant_text: assistant_text,
             publish_idle_state=lambda: idle_calls.append("idle"),
+            llm_fast_path_enabled=False,
         )
 
         self.assertIn(("replying", "Delivering reply", {}), ui.states)

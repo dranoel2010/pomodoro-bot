@@ -80,6 +80,11 @@ class RuntimeEngine:
         self._ui_server = ui_server
         self._setup_signal_handlers = setup_signal_handlers
         self._wait_for_service_ready = wait_for_service_ready
+        self._llm_fast_path_enabled = bool(app_config.llm.fast_path_enabled)
+        self._logger.info(
+            "LLM fast-path routing %s",
+            "enabled" if self._llm_fast_path_enabled else "disabled",
+        )
 
         self._ui = RuntimeUIPublisher(ui_server)
         self._pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
@@ -284,6 +289,7 @@ class RuntimeEngine:
                 build_llm_environment_context=self._build_llm_environment_context,
                 handle_tool_call=self._dispatcher.handle_tool_call,
                 publish_idle_state=self._publish_idle_state,
+                llm_fast_path_enabled=self._llm_fast_path_enabled,
             )
         except Exception as error:
             self._logger.error("Failed to submit utterance task: %s", error)

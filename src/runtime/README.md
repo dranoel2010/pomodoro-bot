@@ -19,5 +19,7 @@ No module-specific environment variables.
 ## Integration notes
 - Uses one orchestration thread for utterance sequencing to avoid overlapping requests.
 - CPU-intensive STT/LLM/TTS work runs in dedicated worker processes.
+- Optional deterministic LLM fast-path can bypass llama.cpp for clear timer/pomodoro/calendar commands.
+- Utterance pipeline logs stage metrics (`stt_ms`, `llm_ms`, `tts_ms`, total duration).
 - Publishes startup sync state for both timer channels.
 - Continues operating if optional services (oracle/ui/tts/llm) are not available.

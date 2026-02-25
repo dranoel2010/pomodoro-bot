@@ -17,6 +17,7 @@ from app_config_schema import (
 )
 
 _ALLOWED_UI_VARIANTS = {"jarvis", "miro"}
+_ALLOWED_LLM_AFFINITY_MODES = {"pinned", "shared"}
 
 
 def parse_app_config(
@@ -124,6 +125,10 @@ def _parse_stt_settings(section: Mapping[str, Any]) -> STTSettings:
         ),
         beam_size=_as_int(section.get("beam_size", STTSettings.beam_size), "stt.beam_size"),
         vad_filter=_as_bool(section.get("vad_filter", STTSettings.vad_filter), "stt.vad_filter"),
+        cpu_threads=_as_int(
+            section.get("cpu_threads", STTSettings.cpu_threads),
+            "stt.cpu_threads",
+        ),
         cpu_cores=_as_int_tuple(section.get("cpu_cores", STTSettings.cpu_cores), "stt.cpu_cores"),
     )
 
@@ -188,11 +193,46 @@ def _parse_llm_settings(
             "llm.temperature",
         ),
         top_p=_as_float(section.get("top_p", LLMSettings.top_p), "llm.top_p"),
+        top_k=_as_int(section.get("top_k", LLMSettings.top_k), "llm.top_k"),
+        min_p=_as_float(section.get("min_p", LLMSettings.min_p), "llm.min_p"),
         repeat_penalty=_as_float(
             section.get("repeat_penalty", LLMSettings.repeat_penalty),
             "llm.repeat_penalty",
         ),
+        n_threads_batch=(
+            _as_int(
+                section.get("n_threads_batch"),
+                "llm.n_threads_batch",
+            )
+            if "n_threads_batch" in section
+            else None
+        ),
+        n_ubatch=(
+            _as_int(section.get("n_ubatch"), "llm.n_ubatch")
+            if "n_ubatch" in section
+            else None
+        ),
+        use_mmap=_as_bool(section.get("use_mmap", LLMSettings.use_mmap), "llm.use_mmap"),
+        use_mlock=_as_bool(
+            section.get("use_mlock", LLMSettings.use_mlock),
+            "llm.use_mlock",
+        ),
         verbose=_as_bool(section.get("verbose", LLMSettings.verbose), "llm.verbose"),
+        fast_path_enabled=_as_bool(
+            section.get("fast_path_enabled", LLMSettings.fast_path_enabled),
+            "llm.fast_path_enabled",
+        ),
+        cpu_affinity_mode=_as_llm_affinity_mode(
+            section.get("cpu_affinity_mode", LLMSettings.cpu_affinity_mode),
+            "llm.cpu_affinity_mode",
+        ),
+        shared_cpu_reserve_cores=_as_int(
+            section.get(
+                "shared_cpu_reserve_cores",
+                LLMSettings.shared_cpu_reserve_cores,
+            ),
+            "llm.shared_cpu_reserve_cores",
+        ),
         cpu_cores=_as_int_tuple(section.get("cpu_cores", LLMSettings.cpu_cores), "llm.cpu_cores"),
     )
 
@@ -385,6 +425,14 @@ def _as_ui_name(value: Any, field: str) -> str:
         allowed = ", ".join(sorted(_ALLOWED_UI_VARIANTS))
         raise AppConfigurationError(f"{field} must be one of: {allowed}.")
     return name
+
+
+def _as_llm_affinity_mode(value: Any, field: str) -> str:
+    mode = _as_str(value, field).lower()
+    if mode not in _ALLOWED_LLM_AFFINITY_MODES:
+        allowed = ", ".join(sorted(_ALLOWED_LLM_AFFINITY_MODES))
+        raise AppConfigurationError(f"{field} must be one of: {allowed}.")
+    return mode
 
 
 def _resolve_path(base_dir: Path, raw: str) -> str:

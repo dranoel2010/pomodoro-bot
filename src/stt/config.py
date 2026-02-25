@@ -95,6 +95,15 @@ class STTConfig:
     language: str | None = "en"
     beam_size: int = 5
     vad_filter: bool = True
+    cpu_threads: int = 0
+
+    def __post_init__(self):
+        if self.beam_size < 1:
+            raise ConfigurationError(f"beam_size must be >= 1, got: {self.beam_size}")
+        if self.cpu_threads < 0:
+            raise ConfigurationError(
+                f"cpu_threads must be >= 0, got: {self.cpu_threads}"
+            )
 
     @classmethod
     def from_settings(cls, settings) -> Self:
@@ -105,4 +114,5 @@ class STTConfig:
             language=settings.language,
             beam_size=settings.beam_size,
             vad_filter=settings.vad_filter,
+            cpu_threads=settings.cpu_threads,
         )

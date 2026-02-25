@@ -135,6 +135,46 @@ class AppConfigLoadingTests(unittest.TestCase):
             app_config = load_app_config(str(config_path))
             self.assertEqual(320, app_config.llm.max_tokens)
 
+    def test_load_app_config_parses_extended_llm_and_stt_tuning_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [stt]
+                    cpu_threads = 3
+
+                    [llm]
+                    n_threads_batch = 6
+                    n_ubatch = 128
+                    top_k = 30
+                    min_p = 0.07
+                    use_mmap = false
+                    use_mlock = true
+                    fast_path_enabled = false
+                    cpu_affinity_mode = "shared"
+                    shared_cpu_reserve_cores = 2
+                    """
+                ).strip(),
+            )
+
+            app_config = load_app_config(str(config_path))
+            self.assertEqual(3, app_config.stt.cpu_threads)
+            self.assertEqual(6, app_config.llm.n_threads_batch)
+            self.assertEqual(128, app_config.llm.n_ubatch)
+            self.assertEqual(30, app_config.llm.top_k)
+            self.assertEqual(0.07, app_config.llm.min_p)
+            self.assertFalse(app_config.llm.use_mmap)
+            self.assertTrue(app_config.llm.use_mlock)
+            self.assertFalse(app_config.llm.fast_path_enabled)
+            self.assertEqual("shared", app_config.llm.cpu_affinity_mode)
+            self.assertEqual(2, app_config.llm.shared_cpu_reserve_cores)
+
     def test_load_app_config_rejects_duplicate_cpu_cores(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
@@ -178,6 +218,28 @@ class AppConfigLoadingTests(unittest.TestCase):
                 load_app_config(str(config_path))
 
             self.assertIn("ui_server.ui", str(context.exception))
+
+    def test_load_app_config_rejects_unknown_llm_affinity_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            _write_text(
+                config_path,
+                textwrap.dedent(
+                    """
+                    [wake_word]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [llm]
+                    cpu_affinity_mode = "auto"
+                    """
+                ).strip(),
+            )
+
+            with self.assertRaises(AppConfigurationError) as context:
+                load_app_config(str(config_path))
+
+            self.assertIn("llm.cpu_affinity_mode", str(context.exception))
 
     def test_load_app_config_rejects_secret_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

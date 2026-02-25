@@ -114,7 +114,20 @@ UI selection settings:
 
 CPU pinning settings:
 - `stt.cpu_cores`, `llm.cpu_cores`, `tts.cpu_cores`: optional integer arrays used to pin dedicated worker processes to specific CPU cores.
+- `llm.cpu_affinity_mode`: `pinned` or `shared`. `shared` keeps the LLM worker unpinned so it can borrow idle cores.
+- `llm.shared_cpu_reserve_cores`: reserve this many cores when `llm.cpu_affinity_mode = "shared"`.
 - STT/LLM/TTS worker logs are forwarded to the main process logger output (stdout).
+
+LLM throughput settings:
+- `llm.n_threads`, `llm.n_threads_batch`, `llm.n_batch`, `llm.n_ubatch`
+- `llm.n_ctx`, `llm.max_tokens`
+- sampling knobs: `llm.top_p`, `llm.top_k`, `llm.min_p`, `llm.repeat_penalty`
+- memory mapping knobs: `llm.use_mmap`, `llm.use_mlock`
+- deterministic command bypass: `llm.fast_path_enabled`
+
+STT throughput settings:
+- `stt.model_size`, `stt.beam_size`, `stt.compute_type`
+- `stt.cpu_threads`, `stt.cpu_cores`
 
 Required first edit in `config.toml`:
 - `wake_word.ppn_file`
@@ -170,6 +183,32 @@ For release archives, run the packaged binary from the extracted release directo
 ```bash
 source .env
 uv run python src/debug/audio_diagnostic.py
+```
+
+## Raspberry Pi 5 Throughput Toolkit
+
+Native llama.cpp build (OpenBLAS/OpenMP + native CPU flags):
+
+```bash
+./scripts/pi5_build_optimized_inference.sh
+```
+
+CPU governor and thermal status/tuning:
+
+```bash
+./scripts/pi5_cpu_tuning.sh status
+sudo ./scripts/pi5_cpu_tuning.sh apply
+```
+
+Model/quantization throughput sweep and ranking:
+
+```bash
+UV_CACHE_DIR=.uv-cache uv run python scripts/pi5_model_sweep.py \
+  --models models/llm/qwen/Qwen3-1.7B-Q4_K_M.gguf \
+           models/llm/qwen/Qwen3-1.7B-Q8_0.gguf \
+  --threads 2,3,4 \
+  --runs 3 \
+  --json-out /tmp/pi5-llm-benchmark.json
 ```
 
 ## Optional Oracle Dependencies

@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -32,11 +33,17 @@ class PomodoroAssistantLLM:
         *,
         max_tokens: int | None = None,
         n_threads: int | None = None,
+        n_threads_batch: int | None = None,
         n_ctx: int | None = None,
         n_batch: int | None = None,
+        n_ubatch: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
         repeat_penalty: float | None = None,
+        use_mmap: bool | None = None,
+        use_mlock: bool | None = None,
         verbose: bool | None = None,
     ) -> "PomodoroAssistantLLM":
         config_kwargs: dict[str, object] = {"model_path": model_path}
@@ -44,16 +51,28 @@ class PomodoroAssistantLLM:
             config_kwargs["max_tokens"] = max_tokens
         if n_threads is not None:
             config_kwargs["n_threads"] = n_threads
+        if n_threads_batch is not None:
+            config_kwargs["n_threads_batch"] = n_threads_batch
         if n_ctx is not None:
             config_kwargs["n_ctx"] = n_ctx
         if n_batch is not None:
             config_kwargs["n_batch"] = n_batch
+        if n_ubatch is not None:
+            config_kwargs["n_ubatch"] = n_ubatch
         if temperature is not None:
             config_kwargs["temperature"] = temperature
         if top_p is not None:
             config_kwargs["top_p"] = top_p
+        if top_k is not None:
+            config_kwargs["top_k"] = top_k
+        if min_p is not None:
+            config_kwargs["min_p"] = min_p
         if repeat_penalty is not None:
             config_kwargs["repeat_penalty"] = repeat_penalty
+        if use_mmap is not None:
+            config_kwargs["use_mmap"] = use_mmap
+        if use_mlock is not None:
+            config_kwargs["use_mlock"] = use_mlock
         if verbose is not None:
             config_kwargs["verbose"] = verbose
         return cls(
@@ -172,7 +191,9 @@ class PomodoroAssistantLLM:
 
         user_prompt_stripped = user_prompt.strip()
         messages.append({"role": "user", "content": user_prompt_stripped})
+        completion_started_at = time.perf_counter()
         content = self._backend.complete(messages, max_tokens=effective_max_tokens)
+        completion_duration_seconds = time.perf_counter() - completion_started_at
         usage = getattr(self._backend, "last_usage", None)
         finish_reason = getattr(self._backend, "last_finish_reason", None)
         prompt_tokens = getattr(self._backend, "last_prompt_tokens", None)
@@ -218,12 +239,23 @@ class PomodoroAssistantLLM:
                 and completion_tokens_derived >= effective_max_tokens
             )
         )
+        completion_tokens_per_second = (
+            round(completion_tokens_derived / completion_duration_seconds, 2)
+            if (
+                isinstance(completion_tokens_derived, int)
+                and completion_tokens_derived > 0
+                and completion_duration_seconds > 0.0
+            )
+            else None
+        )
         self._logger.info(
-            "LLM completion metadata: request_id=%s finish_reason=%s hit_max_tokens=%s max_tokens=%d content_chars=%d system_chars=%d user_chars=%d extra_context_chars=%d total_tokens=%s prompt_tokens=%s completion_tokens_reported=%s completion_tokens_derived=%s accounting_consistent=%s accounting_delta=%s",
+            "LLM completion metadata: request_id=%s finish_reason=%s hit_max_tokens=%s max_tokens=%d duration_ms=%d completion_tokens_per_second=%s content_chars=%d system_chars=%d user_chars=%d extra_context_chars=%d total_tokens=%s prompt_tokens=%s completion_tokens_reported=%s completion_tokens_derived=%s accounting_consistent=%s accounting_delta=%s",
             request_id,
             finish_reason,
             hit_max_tokens,
             effective_max_tokens,
+            round(completion_duration_seconds * 1000),
+            completion_tokens_per_second,
             len(content),
             len(rendered_system_message),
             len(user_prompt_stripped),

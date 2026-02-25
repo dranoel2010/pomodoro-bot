@@ -33,6 +33,7 @@ class FasterWhisperSTT:
         language: str | None = "en",
         beam_size: int = 5,
         vad_filter: bool = True,
+        cpu_threads: int = 0,
         download_root: str | None = None,
         logger: logging.Logger | None = None,
     ):
@@ -46,6 +47,7 @@ class FasterWhisperSTT:
             language: Language code (None for auto-detect)
             beam_size: Beam size for decoding (higher = more accurate but slower)
             vad_filter: Use voice activity detection to filter out non-speech
+            cpu_threads: Number of CPU threads for CTranslate2 (0 = auto)
             logger: Optional logger instance
         """
         self._language = language
@@ -66,6 +68,7 @@ class FasterWhisperSTT:
                 model_size,
                 device=device,
                 compute_type=compute_type,
+                cpu_threads=cpu_threads,
                 download_root=str(download_root_path),
             )
             self._logger.debug("Model loaded successfully")
@@ -175,6 +178,7 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
         language: str | None = "en",
         beam_size: int = 5,
         vad_filter: bool = True,
+        cpu_threads: int = 0,
         min_silence_duration_ms: int = 500,
         download_root: str | None = None,
         logger: logging.Logger | None = None,
@@ -192,6 +196,7 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
             language=language,
             beam_size=beam_size,
             vad_filter=vad_filter,
+            cpu_threads=cpu_threads,
             download_root=download_root,
             logger=logger,
         )

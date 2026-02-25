@@ -24,11 +24,17 @@ class LLMConfig:
     system_prompt_path: str | None = None
     max_tokens: int = 256
     n_threads: int = 4
+    n_threads_batch: int | None = None
     n_ctx: int = 2048
     n_batch: int = 256
+    n_ubatch: int | None = None
     temperature: float = 0.2
     top_p: float = 0.9
+    top_k: int = 40
+    min_p: float = 0.05
     repeat_penalty: float = 1.1
+    use_mmap: bool = True
+    use_mlock: bool = False
     verbose: bool = False
 
     def __post_init__(self):
@@ -50,6 +56,15 @@ class LLMConfig:
             raise ConfigurationError(
                 f"n_threads too high ({self.n_threads}), consider <= 64"
             )
+        if self.n_threads_batch is not None:
+            if self.n_threads_batch < 1:
+                raise ConfigurationError(
+                    f"n_threads_batch must be >= 1, got: {self.n_threads_batch}"
+                )
+            if self.n_threads_batch > 64:
+                raise ConfigurationError(
+                    f"n_threads_batch too high ({self.n_threads_batch}), consider <= 64"
+                )
 
         if self.n_ctx < 128:
             raise ConfigurationError(f"n_ctx must be >= 128, got: {self.n_ctx}")
@@ -64,6 +79,15 @@ class LLMConfig:
             raise ConfigurationError(
                 f"n_batch ({self.n_batch}) cannot exceed n_ctx ({self.n_ctx})"
             )
+        if self.n_ubatch is not None:
+            if self.n_ubatch < 1:
+                raise ConfigurationError(
+                    f"n_ubatch must be >= 1, got: {self.n_ubatch}"
+                )
+            if self.n_ubatch > self.n_batch:
+                raise ConfigurationError(
+                    f"n_ubatch ({self.n_ubatch}) cannot exceed n_batch ({self.n_batch})"
+                )
 
         if self.max_tokens < 1:
             raise ConfigurationError(
@@ -81,6 +105,10 @@ class LLMConfig:
 
         if not 0.0 <= self.top_p <= 1.0:
             raise ConfigurationError(f"top_p must be in [0.0, 1.0], got: {self.top_p}")
+        if self.top_k < 0:
+            raise ConfigurationError(f"top_k must be >= 0, got: {self.top_k}")
+        if not 0.0 <= self.min_p <= 1.0:
+            raise ConfigurationError(f"min_p must be in [0.0, 1.0], got: {self.min_p}")
 
         if not 1.0 <= self.repeat_penalty <= 2.0:
             raise ConfigurationError(
@@ -99,11 +127,17 @@ class LLMConfig:
         system_prompt_path: str | None = None,
         max_tokens: int | None = None,
         n_threads: int | None = None,
+        n_threads_batch: int | None = None,
         n_ctx: int | None = None,
         n_batch: int | None = None,
+        n_ubatch: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
         repeat_penalty: float | None = None,
+        use_mmap: bool | None = None,
+        use_mlock: bool | None = None,
         verbose: bool | None = None,
         logger: logging.Logger | None = None,
     ) -> Self:
@@ -128,16 +162,28 @@ class LLMConfig:
             config_kwargs["max_tokens"] = max_tokens
         if n_threads is not None:
             config_kwargs["n_threads"] = n_threads
+        if n_threads_batch is not None:
+            config_kwargs["n_threads_batch"] = n_threads_batch
         if n_ctx is not None:
             config_kwargs["n_ctx"] = n_ctx
         if n_batch is not None:
             config_kwargs["n_batch"] = n_batch
+        if n_ubatch is not None:
+            config_kwargs["n_ubatch"] = n_ubatch
         if temperature is not None:
             config_kwargs["temperature"] = temperature
         if top_p is not None:
             config_kwargs["top_p"] = top_p
+        if top_k is not None:
+            config_kwargs["top_k"] = top_k
+        if min_p is not None:
+            config_kwargs["min_p"] = min_p
         if repeat_penalty is not None:
             config_kwargs["repeat_penalty"] = repeat_penalty
+        if use_mmap is not None:
+            config_kwargs["use_mmap"] = use_mmap
+        if use_mlock is not None:
+            config_kwargs["use_mlock"] = use_mlock
         if verbose is not None:
             config_kwargs["verbose"] = verbose
         return cls(**config_kwargs)

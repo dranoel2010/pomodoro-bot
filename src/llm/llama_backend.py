@@ -58,8 +58,12 @@ class LlamaBackend:
         self._llm = Llama(
             model_path=config.model_path,
             n_threads=config.n_threads,
+            n_threads_batch=config.n_threads_batch,
             n_ctx=config.n_ctx,
             n_batch=config.n_batch,
+            n_ubatch=config.n_ubatch,
+            use_mmap=config.use_mmap,
+            use_mlock=config.use_mlock,
             verbose=config.verbose,
         )
         self._grammar = LlamaGrammar.from_string(build_gbnf_schema())
@@ -75,6 +79,8 @@ class LlamaBackend:
             messages=messages,
             temperature=self._config.temperature,
             top_p=self._config.top_p,
+            top_k=self._config.top_k,
+            min_p=self._config.min_p,
             repeat_penalty=self._config.repeat_penalty,
             max_tokens=max_tokens,
             grammar=self._grammar,
