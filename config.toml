@@ -35,7 +35,7 @@ cpu_cores = [2, 3]
 [llm]
 enabled = true
 model_path = "models/llm/qwen"
-hf_filename = "Qwen3-1.7B-Q4_K_M.gguf"          # Qwen3-1.7B-Q8_0.gguf, Qwen2.5-3B-Instruct-Q4_K_M.gguf, Qwen3-30B-A3B-Instruct-2507-Q4_K_S-3.92bpw.gguf
+hf_filename = "Qwen3-1.7B-Q5_K_M.gguf"          # Qwen3-1.7B-Q8_0.gguf, Qwen2.5-3B-Instruct-Q4_K_M.gguf, Qwen3-30B-A3B-Instruct-2507-Q4_K_S-3.92bpw.gguf
 hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf" # Qwen/Qwen3-1.7B-GGUF, Qwen/Qwen2.5-3B-Instruct-GGUF, byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF
 hf_revision = "main"
 n_batch = 256

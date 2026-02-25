@@ -1,7 +1,5 @@
 """Regex-based extractors for durations, topics, calendar details, and times."""
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Callable
@@ -128,6 +126,7 @@ def normalize_duration(value: Any) -> str | None:
     match = re.search(
         r"(\d{1,4})\s*(sek|sekunde|sekunden|s|min|minute|minuten|m|stunde|stunden|h)",
         raw,
+        re.IGNORECASE,
     )
     if not match:
         return None
