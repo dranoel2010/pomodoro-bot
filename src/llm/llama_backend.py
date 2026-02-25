@@ -10,23 +10,32 @@ from .config import LLMConfig
 
 GBNF_SCHEMA_TEMPLATE = r"""
 root ::= "{" ws "\"assistant_text\"" ws ":" ws string ws "," ws "\"tool_call\"" ws ":" ws toolcall ws "}"
+
 toolcall ::= "null" | toolobj
-toolobj ::= "{" ws "\"name\"" ws ":" ws toolname ws "," ws "\"arguments\"" ws ":" ws argobj ws "}"
-toolname ::= __TOOLNAME_ALTERNATIVES__
-argobj ::= "{" ws "}" | "{" ws kv-list ws "}"
-kv-list ::= kv-pair | kv-pair ws "," ws kv-list
-kv-pair ::= string ws ":" ws value
-value ::= string | number | "null"
+
+toolobj ::= timer-obj | pomodoro-obj | calendar-show-obj | calendar-add-obj | empty-obj
+
+timer-obj ::= "{" ws "\"name\"" ws ":" ws "\"start_timer\"" ws "," ws "\"arguments\"" ws ":" ws timer-args ws "}"
+pomodoro-obj ::= "{" ws "\"name\"" ws ":" ws "\"start_pomodoro_session\"" ws "," ws "\"arguments\"" ws ":" ws pomodoro-args ws "}"
+calendar-show-obj ::= "{" ws "\"name\"" ws ":" ws "\"show_upcoming_events\"" ws "," ws "\"arguments\"" ws ":" ws calendar-show-args ws "}"
+calendar-add-obj ::= "{" ws "\"name\"" ws ":" ws "\"add_calendar_event\"" ws "," ws "\"arguments\"" ws ":" ws calendar-add-args ws "}"
+empty-obj ::= "{" ws "\"name\"" ws ":" ws empty-name ws "," ws "\"arguments\"" ws ":" ws empty-args ws "}"
+
+empty-name ::= "\"stop_timer\"" | "\"pause_timer\"" | "\"continue_timer\"" | "\"reset_timer\"" | "\"stop_pomodoro_session\"" | "\"pause_pomodoro_session\"" | "\"continue_pomodoro_session\"" | "\"reset_pomodoro_session\""
+
+timer-args        ::= "{" ws "\"duration\"" ws ":" ws string ws "}"
+pomodoro-args     ::= "{" ws "\"focus_topic\"" ws ":" ws string ws "}"
+calendar-show-args ::= "{" ws "\"time_range\"" ws ":" ws string ws "}"
+calendar-add-args ::= "{" ws "\"title\"" ws ":" ws string ws "," ws "\"start_time\"" ws ":" ws string ws calendar-add-optional ws "}"
+calendar-add-optional ::= "" | ws "," ws "\"end_time\"" ws ":" ws string | ws "," ws "\"duration\"" ws ":" ws string
+empty-args        ::= "{" ws "}"
+
 string ::= "\"" (char)* "\""
-char ::= [^"\\] | escape
+char   ::= [^"\\] | escape
 escape ::= "\\" (["\\/bfnrt] | "u" hex hex hex hex)
-hex ::= [0-9a-fA-F]
-number ::= int frac? exp?
-int ::= "-"? ([0-9] | [1-9] (digit)*)
-frac ::= "." (digit)+
-exp ::= [eE] [-+]? (digit)+
-digit ::= [0-9]
-ws ::= ([ \t\n\r])*
+hex    ::= [0-9a-fA-F]
+
+ws ::= ([ \t\n\r])?
 """.strip()
 
 
@@ -52,6 +61,7 @@ def build_gbnf_schema() -> str:
 
 class LlamaBackend:
     """Thin wrapper around llama.cpp chat completion with grammar constraints."""
+
     def __init__(self, config: LLMConfig):
         from llama_cpp import Llama, LlamaGrammar
 
@@ -97,9 +107,7 @@ class LlamaBackend:
             completion_tokens = _as_int(usage.get("completion_tokens"))
             total_tokens = _as_int(usage.get("total_tokens"))
             usage_raw = {
-                key: value
-                for key, value in usage.items()
-                if isinstance(key, str)
+                key: value for key, value in usage.items() if isinstance(key, str)
             }
         else:
             prompt_tokens = None
@@ -150,10 +158,7 @@ def _build_completion_usage(
     raw_usage: dict[str, object] | None,
 ) -> CompletionUsage:
     derived_completion_tokens: int | None = None
-    if (
-        isinstance(total_tokens, int)
-        and isinstance(prompt_tokens, int)
-    ):
+    if isinstance(total_tokens, int) and isinstance(prompt_tokens, int):
         derived_completion_tokens = total_tokens - prompt_tokens
 
     accounting_consistent: bool | None = None

@@ -2,14 +2,14 @@
 ppn_file = "models/sst/hey-pomo.ppn"
 pv_file = "models/sst/porcupine_params_de.pv"
 
-adaptive_threshold_multiplier = 1.5
+adaptive_threshold_multiplier = 2.2
 device_index = 0
-energy_threshold = 100
-max_utterance_seconds = 10.0
-min_speech_seconds = 0.15
-no_speech_timeout_seconds = 3.0
+energy_threshold = 180
+max_utterance_seconds = 4.5
+min_speech_seconds = 0.2
+no_speech_timeout_seconds = 1.2
 noise_floor_calibration_seconds = 1.0
-silence_timeout_seconds = 1.5
+silence_timeout_seconds = 0.7
 validate_paths = true
 
 [stt]
@@ -29,7 +29,7 @@ hf_repo_id = "Thorsten-Voice/Piper"
 hf_revision = "main"
 model_path = "models/tts/thorsten-piper"
 gpu = false
-cpu_cores = [0]
+cpu_cores = [2, 3]
 # output_device = 0
 
 [llm]
@@ -41,11 +41,11 @@ hf_revision = "main"
 n_batch = 256
 n_ubatch = 128
 n_ctx = 2048
-n_threads = 3
-n_threads_batch = 3
-repeat_penalty = 1.1
+n_threads = 4
+n_threads_batch = 4
+repeat_penalty = 1.5
 system_prompt = "prompts/system_prompt.md"
-temperature = 0.2
+temperature = 0.1
 top_p = 0.9
 top_k = 20
 min_p = 0.05
@@ -54,8 +54,8 @@ use_mlock = false
 verbose = false
 fast_path_enabled = true
 cpu_affinity_mode = "shared"
-shared_cpu_reserve_cores = 1
-cpu_cores = [1, 2, 3]
+shared_cpu_reserve_cores = 0
+cpu_cores = [0, 1, 2, 3]
 max_tokens = 192
 
 [ui_server]
