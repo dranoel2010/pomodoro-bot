@@ -1,5 +1,11 @@
 """Runtime engine exports."""
 
-from .loop import RuntimeEngine
+__all__ = ["PipecatRuntimeEngine"]
 
-__all__ = ["RuntimeEngine"]
+
+def __getattr__(name: str):
+    if name == "PipecatRuntimeEngine":
+        from .pipecat_engine import PipecatRuntimeEngine
+
+        return PipecatRuntimeEngine
+    raise AttributeError(name)

@@ -51,11 +51,13 @@ class RuntimeToolDispatcher:
         ui: RuntimeUIPublisher,
     ):
         self._logger = logger
-        self._app_config = app_config
         self._oracle_service = oracle_service
         self._pomodoro_timer = pomodoro_timer
         self._countdown_timer = countdown_timer
         self._ui = ui
+        self._calendar_max_results = (
+            app_config.pipecat.tools.calendar.google_calendar_max_results
+        )
 
     def active_runtime_message(self) -> str:
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
@@ -93,7 +95,7 @@ class RuntimeToolDispatcher:
                 tool_name=raw_name,
                 arguments=normalized_arguments,
                 oracle_service=self._oracle_service,
-                app_config=self._app_config,
+                calendar_max_results=self._calendar_max_results,
                 logger=self._logger,
             )
 

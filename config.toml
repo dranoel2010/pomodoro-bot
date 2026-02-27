@@ -1,7 +1,11 @@
-[wake_word]
+[pipecat.runtime]
+language = "de"
+allow_interruptions = false
+metrics_enabled = true
+
+[pipecat.wake.porcupine]
 ppn_file = "models/sst/hey-pomo.ppn"
 pv_file = "models/sst/porcupine_params_de.pv"
-
 adaptive_threshold_multiplier = 2.2
 device_index = 0
 energy_threshold = 180
@@ -12,7 +16,7 @@ noise_floor_calibration_seconds = 1.0
 silence_timeout_seconds = 0.7
 validate_paths = true
 
-[stt]
+[pipecat.stt.faster_whisper]
 beam_size = 1
 compute_type = "int8"
 device = "cpu"
@@ -22,21 +26,20 @@ vad_filter = true
 cpu_threads = 2
 cpu_cores = [0, 1]
 
-[tts]
+[pipecat.tts.piper]
 enabled = true
 hf_filename = "de_DE-thorsten-high.onnx"
 hf_repo_id = "Thorsten-Voice/Piper"
 hf_revision = "main"
 model_path = "models/tts/thorsten-piper"
-gpu = false
 cpu_cores = [2, 3]
 # output_device = 0
 
-[llm]
+[pipecat.llm.local_llama]
 enabled = true
 model_path = "models/llm/qwen"
-hf_filename = "Qwen3-1.7B-Q5_K_M.gguf"          # Qwen3-1.7B-Q8_0.gguf, Qwen2.5-3B-Instruct-Q4_K_M.gguf, Qwen3-30B-A3B-Instruct-2507-Q4_K_S-3.92bpw.gguf
-hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf" # Qwen/Qwen3-1.7B-GGUF, Qwen/Qwen2.5-3B-Instruct-GGUF, byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF
+hf_filename = "Qwen3-1.7B-Q5_K_M.gguf"
+hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf"
 hf_revision = "main"
 n_batch = 256
 n_ubatch = 128
@@ -44,7 +47,7 @@ n_ctx = 2048
 n_threads = 4
 n_threads_batch = 4
 repeat_penalty = 1.5
-system_prompt = "prompts/system_prompt.md"
+system_prompt = "prompts/system_prompt_v5.md"
 temperature = 0.2
 top_p = 0.9
 top_k = 20
@@ -58,23 +61,23 @@ shared_cpu_reserve_cores = 0
 cpu_cores = [0, 1, 2, 3]
 max_tokens = 192
 
-[ui_server]
+[pipecat.ui]
 enabled = true
 host = "127.0.0.1"
 port = 8765
 ui = "miro"
 
-[oracle]
-calendar_cache_ttl_seconds = 60
+[pipecat.tools.calendar]
 enabled = true
 ens160_enabled = false
-ens160_humidity_compensation_pct = 50
-ens160_temperature_compensation_c = 25
+temt6000_enabled = false
 google_calendar_enabled = true
 google_calendar_max_results = 5
 sensor_cache_ttl_seconds = 15
+calendar_cache_ttl_seconds = 60
+ens160_humidity_compensation_pct = 50
+ens160_temperature_compensation_c = 25
 temt6000_adc_address = "0x48"
 temt6000_busnum = 1
 temt6000_channel = 0
-temt6000_enabled = false
 temt6000_gain = 1

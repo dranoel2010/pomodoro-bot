@@ -10,7 +10,7 @@ Text-to-speech synthesis and playback based on Piper and sounddevice.
 - `service.py`: `SpeechService` facade.
 
 ## Configuration
-From `config.toml` (`[tts]`):
+From `config.toml` (`[pipecat.tts.piper]`):
 - `enabled`
 - `model_path`
 - `hf_filename`

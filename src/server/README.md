@@ -11,7 +11,7 @@ Built-in HTTP + websocket server that serves the selected UI and streams runtime
 - `ui_server.py`: standalone launch script.
 
 ## Configuration
-From `config.toml` (`[ui_server]`):
+From `config.toml` (`[pipecat.ui]`):
 - `enabled`
 - `host`
 - `port`

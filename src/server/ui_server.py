@@ -24,13 +24,13 @@ def main() -> int:
 
     try:
         app_config = load_app_config(str(resolve_config_path()))
-        config = UIServerConfig.from_settings(app_config.ui_server)
+        config = UIServerConfig.from_settings(app_config.pipecat.ui)
     except (AppConfigurationError, ServerConfigurationError) as error:
         logger.error("UI server configuration error: %s", error)
         return 1
 
     if not config.enabled:
-        logger.info("UI server disabled via UI_SERVER_ENABLED=false")
+        logger.info("UI server disabled via pipecat.ui.enabled=false")
         return 0
 
     server = UIServer(config=config, logger=logger)

@@ -6,6 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+_SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 # Import runtime.calendar_tools without executing src/runtime/__init__.py.
 _RUNTIME_DIR = Path(__file__).resolve().parents[2] / "src" / "runtime"
 if "runtime" not in sys.modules:
@@ -45,16 +49,6 @@ class _OracleStub:
     def add_event(self, *, title: str, start: dt.datetime, end: dt.datetime) -> str:
         self.add_calls.append({"title": title, "start": start, "end": end})
         return self._event_id
-
-
-class _OracleSettingsStub:
-    def __init__(self, *, max_results: int = 3):
-        self.google_calendar_max_results = max_results
-
-
-class _AppConfigStub:
-    def __init__(self, *, max_results: int = 3):
-        self.oracle = _OracleSettingsStub(max_results=max_results)
 
 
 class CalendarToolsTests(unittest.TestCase):
@@ -120,14 +114,13 @@ class CalendarToolsTests(unittest.TestCase):
                 {"summary": "Far Future", "start": "2026-03-01T09:00:00+00:00"},
             ]
         )
-        app_config = _AppConfigStub(max_results=3)
 
         with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
                 tool_name="show_upcoming_events",
                 arguments={"time_range": "morgen"},
                 oracle_service=oracle,
-                app_config=app_config,
+                calendar_max_results=3,
                 logger=logging.getLogger("test"),
             )
             expected_start_text = format_calendar_value_natural(
@@ -145,7 +138,6 @@ class CalendarToolsTests(unittest.TestCase):
 
     def test_add_calendar_event_uses_duration_when_end_missing(self) -> None:
         oracle = _OracleStub(event_id="evt-42")
-        app_config = _AppConfigStub()
 
         with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
@@ -156,7 +148,7 @@ class CalendarToolsTests(unittest.TestCase):
                     "duration": "45",
                 },
                 oracle_service=oracle,
-                app_config=app_config,
+                calendar_max_results=3,
                 logger=logging.getLogger("test"),
             )
 
@@ -178,7 +170,6 @@ class CalendarToolsTests(unittest.TestCase):
 
     def test_add_calendar_event_accepts_relative_start_time(self) -> None:
         oracle = _OracleStub(event_id="evt-77")
-        app_config = _AppConfigStub()
 
         with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
@@ -188,7 +179,7 @@ class CalendarToolsTests(unittest.TestCase):
                     "start_time": "heute 10 Uhr",
                 },
                 oracle_service=oracle,
-                app_config=app_config,
+                calendar_max_results=3,
                 logger=logging.getLogger("test"),
             )
 
@@ -213,7 +204,7 @@ class CalendarToolsTests(unittest.TestCase):
             tool_name="show_upcoming_events",
             arguments={"time_range": "heute"},
             oracle_service=None,
-            app_config=_AppConfigStub(),
+            calendar_max_results=3,
             logger=logging.getLogger("test"),
         )
         self.assertEqual("Kalenderfunktion ist derzeit nicht verfuegbar.", message)

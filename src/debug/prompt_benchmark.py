@@ -623,7 +623,7 @@ def _build_llm_config(
     first_prompt_path: str,
 ) -> LLMConfig:
     app_cfg = load_app_config(args.config)
-    llm_settings = app_cfg.llm
+    llm_settings = app_cfg.pipecat.llm.local_llama
 
     max_tokens = args.max_tokens
     if max_tokens is None:
@@ -1155,7 +1155,7 @@ def main() -> int:
         app_config = load_app_config(args.config)
         prompt_paths = list(args.system_prompts)
         if not prompt_paths:
-            config_prompt = (app_config.llm.system_prompt or "").strip()
+            config_prompt = (app_config.pipecat.llm.local_llama.system_prompt or "").strip()
             if not config_prompt:
                 raise ValueError(
                     "No system prompt files supplied and llm.system_prompt is empty in config"

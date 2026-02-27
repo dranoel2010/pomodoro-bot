@@ -8,7 +8,7 @@ Hardware sensor adapters for air quality and ambient light context.
 - `temt6000_sensor.py`: TEMT6000 luminance readings via ADS1115.
 
 ## Configuration
-From `config.toml` (`[oracle]`):
+From `config.toml` (`[pipecat.tools.calendar]`):
 - `ens160_enabled`
 - `temt6000_enabled`
 - `ens160_temperature_compensation_c`

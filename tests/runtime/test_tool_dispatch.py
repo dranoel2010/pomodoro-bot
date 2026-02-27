@@ -4,6 +4,10 @@ import types
 import unittest
 from pathlib import Path
 
+_SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from pomodoro import PomodoroTimer
 
 # Import runtime modules without executing src/runtime/__init__.py.
@@ -29,12 +33,20 @@ class _UIServerStub:
         self.states.append((state, message, payload))
 
 
-class _OracleSettingsStub:
+class _CalendarSettingsStub:
     google_calendar_max_results = 3
 
 
+class _ToolSettingsStub:
+    calendar = _CalendarSettingsStub()
+
+
+class _PipecatSettingsStub:
+    tools = _ToolSettingsStub()
+
+
 class _AppConfigStub:
-    oracle = _OracleSettingsStub()
+    pipecat = _PipecatSettingsStub()
 
 
 class RuntimeToolDispatcherTests(unittest.TestCase):

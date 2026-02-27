@@ -13,7 +13,7 @@ Local LLM integration that generates structured assistant replies and normalized
 - `types.py`: typed response and environment context payloads.
 
 ## Configuration
-From `config.toml` (`[llm]`):
+From `config.toml` (`[pipecat.llm.local_llama]`):
 - `enabled`
 - `model_path`
 - `hf_filename`
@@ -43,7 +43,7 @@ Secrets from environment:
 - `LLM_SYSTEM_PROMPT` (optional fallback prompt path)
 
 ## Integration notes
-- `src/main.py` initializes the module only when `llm.enabled = true`.
+- `src/main.py` initializes the module only when `pipecat.llm.local_llama.enabled = true`.
 - Runtime tool execution uses canonical tool names from `src/contracts/tool_contract.py`.
 - Parser fallback inference is intentionally enabled when model output is invalid or incomplete.
 - Completion logs include token accounting plus throughput metrics (duration and completion tokens/sec).

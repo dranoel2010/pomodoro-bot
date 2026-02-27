@@ -13,8 +13,8 @@ Wake-word detection, utterance capture, and speech-to-text transcription compone
 
 ## Configuration
 From `config.toml`:
-- `[wake_word]`: `ppn_file`, `pv_file`, `device_index`, timing and VAD tuning fields.
-- `[stt]`: `model_size`, `device`, `compute_type`, `language`, `beam_size`, `vad_filter`, `cpu_threads`, `cpu_cores`.
+- `[pipecat.wake.porcupine]`: `ppn_file`, `pv_file`, `device_index`, timing and VAD tuning fields.
+- `[pipecat.stt.faster_whisper]`: `model_size`, `device`, `compute_type`, `language`, `beam_size`, `vad_filter`, `cpu_threads`, `cpu_cores`.
 
 Secrets from environment:
 - `PICO_VOICE_ACCESS_KEY`

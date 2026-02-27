@@ -3,8 +3,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-
-from app_config_schema import UIServerSettings
+from types import SimpleNamespace
 
 # Import server.config without executing src/server/__init__.py.
 _SERVER_DIR = Path(__file__).resolve().parents[2] / "src" / "server"
@@ -18,7 +17,7 @@ from server.config import ServerConfigurationError, UIServerConfig
 
 class UIServerConfigTests(unittest.TestCase):
     def test_from_settings_uses_selected_builtin_ui(self) -> None:
-        settings = UIServerSettings(
+        settings = SimpleNamespace(
             enabled=True,
             host="127.0.0.1",
             port=8765,
@@ -36,7 +35,7 @@ class UIServerConfigTests(unittest.TestCase):
         self.assertTrue(Path(config.index_file).is_file())
 
     def test_from_settings_rejects_unknown_ui(self) -> None:
-        settings = UIServerSettings(
+        settings = SimpleNamespace(
             enabled=True,
             host="127.0.0.1",
             port=8765,
@@ -52,7 +51,7 @@ class UIServerConfigTests(unittest.TestCase):
             custom = Path(temp_dir) / "index.html"
             custom.write_text("<html></html>", encoding="utf-8")
 
-            settings = UIServerSettings(
+            settings = SimpleNamespace(
                 enabled=True,
                 host="127.0.0.1",
                 port=8765,

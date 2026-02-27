@@ -16,7 +16,6 @@ from shared.defaults import (
 from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_EVENTS
 
 if TYPE_CHECKING:
-    from app_config import AppConfig
     from oracle.service import OracleContextService
 
 
@@ -205,7 +204,7 @@ def handle_calendar_tool_call(
     tool_name: str,
     arguments: dict[str, object],
     oracle_service: "OracleContextService" | None,
-    app_config: "AppConfig",
+    calendar_max_results: int,
     logger: logging.Logger,
 ) -> str:
     """Execute calendar tool calls and return user-facing German responses."""
@@ -220,7 +219,7 @@ def handle_calendar_tool_call(
             )
             now = dt.datetime.now().astimezone()
             window_end = calendar_window_end(time_range)
-            max_results = app_config.oracle.google_calendar_max_results
+            max_results = max(1, int(calendar_max_results))
             events = oracle_service.list_upcoming_events(
                 max_results=max_results * 2,
                 time_min=now,

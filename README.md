@@ -5,18 +5,19 @@ Its purpose is to let you control timers and pomodoro sessions hands-free, with 
 calendar awareness and spoken responses. Core capabilities include wake-word detection,
 speech transcription, structured local LLM tool-calling, TTS playback, and a live web UI.
 
-Current runtime pipeline:
-- wake-word + utterance capture (`stt`)
+Current runtime pipeline (Pipecat-only):
+- wake-word + utterance capture (Porcupine + local capture)
 - transcription (`faster-whisper`)
-- optional local LLM response (`llm`)
-- optional TTS playback (`tts`)
+- optional local LLM response (`llama.cpp` worker)
+- tool dispatch (timer/pomodoro/calendar contract)
+- optional TTS playback (`piper`)
 - built-in UI server (`server`) serving `web_ui/<ui>/index.html` + websocket updates
 
 ## Project layout
 
 - `src/main.py`: app entrypoint and dependency bootstrap.
-- `src/app_config.py`, `src/app_config_parser.py`, `src/app_config_schema.py`: runtime config loading and validation.
-- `src/runtime/`: main orchestration loop (events, utterance pipeline, tool dispatch). See `src/runtime/README.md`.
+- `src/app_config.py`: Pipecat-only runtime config loading and validation.
+- `src/runtime/`: Pipecat runtime orchestration (`src/runtime/pipecat_engine.py`) plus runtime tool/tick/UI adapters.
 - `src/stt/`: wake-word capture + transcription foundation. See `src/stt/README.md`.
 - `src/llm/`: local LLM config/download/backend/parser/service. See `src/llm/README.md`.
 - `src/tts/`: TTS model loading + playback service. See `src/tts/README.md`.
@@ -101,37 +102,29 @@ tar -xzf pomodoro-bot-release.tar.gz
 
 Configure runtime settings in `config.toml` (non-secret values).
 
-The repo includes a default `config.toml` with sections for:
-- `wake_word`
-- `stt`
-- `tts`
-- `llm`
-- `ui_server`
-- `oracle`
+The repo includes a default Pipecat-only `config.toml` with sections for:
+- `pipecat.runtime`
+- `pipecat.wake.porcupine`
+- `pipecat.stt.faster_whisper`
+- `pipecat.llm.local_llama`
+- `pipecat.tts.piper`
+- `pipecat.ui`
+- `pipecat.tools.calendar`
 
 UI selection settings:
-- `ui_server.ui`: built-in UI variant (`jarvis` or `miro`)
+- `pipecat.ui.ui`: built-in UI variant (`jarvis` or `miro`)
 
 CPU pinning settings:
-- `stt.cpu_cores`, `llm.cpu_cores`, `tts.cpu_cores`: optional integer arrays used to pin dedicated worker processes to specific CPU cores.
-- `llm.cpu_affinity_mode`: `pinned` or `shared`. `shared` keeps the LLM worker unpinned so it can borrow idle cores.
-- `llm.shared_cpu_reserve_cores`: reserve this many cores when `llm.cpu_affinity_mode = "shared"`.
+- `pipecat.stt.faster_whisper.cpu_cores`
+- `pipecat.llm.local_llama.cpu_cores`
+- `pipecat.tts.piper.cpu_cores`
+- `pipecat.llm.local_llama.cpu_affinity_mode`: `pinned` or `shared`
+- `pipecat.llm.local_llama.shared_cpu_reserve_cores`
 - STT/LLM/TTS worker logs are forwarded to the main process logger output (stdout).
 
-LLM throughput settings:
-- `llm.n_threads`, `llm.n_threads_batch`, `llm.n_batch`, `llm.n_ubatch`
-- `llm.n_ctx`, `llm.max_tokens`
-- sampling knobs: `llm.top_p`, `llm.top_k`, `llm.min_p`, `llm.repeat_penalty`
-- memory mapping knobs: `llm.use_mmap`, `llm.use_mlock`
-- deterministic command bypass: `llm.fast_path_enabled`
-
-STT throughput settings:
-- `stt.model_size`, `stt.beam_size`, `stt.compute_type`
-- `stt.cpu_threads`, `stt.cpu_cores`
-
 Required first edit in `config.toml`:
-- `wake_word.ppn_file`
-- `wake_word.pv_file`
+- `pipecat.wake.porcupine.ppn_file`
+- `pipecat.wake.porcupine.pv_file`
 
 Set only secrets in `.env` (or your shell), for example:
 
@@ -139,7 +132,7 @@ Set only secrets in `.env` (or your shell), for example:
 export PICO_VOICE_ACCESS_KEY="..."
 # optional
 # export HF_TOKEN="..."
-# required only when oracle.google_calendar_enabled=true in config.toml:
+# required only when pipecat.tools.calendar.google_calendar_enabled=true:
 # export ORACLE_GOOGLE_CALENDAR_ID="primary"
 # export ORACLE_GOOGLE_SERVICE_ACCOUNT_FILE="/absolute/path/to/service-account.json"
 ```

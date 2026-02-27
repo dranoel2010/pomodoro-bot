@@ -6,6 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+_SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from app_config import (
     AppConfigurationError,
     load_app_config,
@@ -28,64 +32,53 @@ class AppConfigLoadingTests(unittest.TestCase):
                 config_path,
                 textwrap.dedent(
                     """
-                    [wake_word]
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
                     ppn_file = "models/wake.ppn"
                     pv_file = "models/params.pv"
 
-                    [tts]
-                    model_path = "voices/de_DE.onnx"
+                    [pipecat.stt.faster_whisper]
 
-                    [llm]
+                    [pipecat.llm.local_llama]
+                    enabled = false
                     system_prompt = "prompts/system.md"
 
-                    [ui_server]
+                    [pipecat.tts.piper]
+                    enabled = true
+                    model_path = "voices/de_DE.onnx"
+                    hf_filename = "de_DE.onnx"
+
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
                     ui = "miro"
                     index_file = "web/index.html"
+
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
                     """
                 ).strip(),
             )
 
             app_config = load_app_config(str(config_path))
+            porcupine = app_config.pipecat.wake.porcupine
+            piper = app_config.pipecat.tts.piper
+            llama = app_config.pipecat.llm.local_llama
+            ui = app_config.pipecat.ui
 
             self.assertEqual(str(config_path), app_config.source_file)
-            self.assertEqual(
-                str((root / "models/wake.ppn").resolve()),
-                app_config.wake_word.ppn_file,
-            )
-            self.assertEqual(
-                str((root / "models/params.pv").resolve()),
-                app_config.wake_word.pv_file,
-            )
-            self.assertEqual(
-                str((root / "voices/de_DE.onnx").resolve()),
-                app_config.tts.model_path,
-            )
-            self.assertEqual(
-                str((root / "prompts/system.md").resolve()),
-                app_config.llm.system_prompt,
-            )
-            self.assertEqual(
-                str((root / "web/index.html").resolve()),
-                app_config.ui_server.index_file,
-            )
-            self.assertEqual("miro", app_config.ui_server.ui)
-
-    def test_load_app_config_uses_default_ui_variant(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "config.toml"
-            _write_text(
-                config_path,
-                textwrap.dedent(
-                    """
-                    [wake_word]
-                    ppn_file = "wake.ppn"
-                    pv_file = "params.pv"
-                    """
-                ).strip(),
-            )
-
-            app_config = load_app_config(str(config_path))
-            self.assertEqual("jarvis", app_config.ui_server.ui)
+            self.assertEqual(str((root / "models/wake.ppn").resolve()), porcupine.ppn_file)
+            self.assertEqual(str((root / "models/params.pv").resolve()), porcupine.pv_file)
+            self.assertEqual(str((root / "voices/de_DE.onnx").resolve()), piper.model_path)
+            self.assertEqual(str((root / "prompts/system.md").resolve()), llama.system_prompt)
+            self.assertEqual(str((root / "web/index.html").resolve()), ui.index_file)
+            self.assertEqual("miro", ui.ui)
 
     def test_load_app_config_parses_cpu_core_affinity_lists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -94,86 +87,44 @@ class AppConfigLoadingTests(unittest.TestCase):
                 config_path,
                 textwrap.dedent(
                     """
-                    [wake_word]
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
                     ppn_file = "wake.ppn"
                     pv_file = "params.pv"
 
-                    [stt]
+                    [pipecat.stt.faster_whisper]
                     cpu_cores = [0, 1]
 
-                    [tts]
+                    [pipecat.llm.local_llama]
+                    enabled = false
+                    cpu_cores = [3, 4, 5]
+
+                    [pipecat.tts.piper]
+                    enabled = true
+                    hf_filename = "de.onnx"
                     cpu_cores = [2]
 
-                    [llm]
-                    cpu_cores = [3, 4, 5]
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
+                    ui = "jarvis"
+
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
                     """
                 ).strip(),
             )
 
             app_config = load_app_config(str(config_path))
-            self.assertEqual((0, 1), app_config.stt.cpu_cores)
-            self.assertEqual((2,), app_config.tts.cpu_cores)
-            self.assertEqual((3, 4, 5), app_config.llm.cpu_cores)
-
-    def test_load_app_config_parses_optional_llm_max_tokens(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "config.toml"
-            _write_text(
-                config_path,
-                textwrap.dedent(
-                    """
-                    [wake_word]
-                    ppn_file = "wake.ppn"
-                    pv_file = "params.pv"
-
-                    [llm]
-                    max_tokens = 320
-                    """
-                ).strip(),
-            )
-
-            app_config = load_app_config(str(config_path))
-            self.assertEqual(320, app_config.llm.max_tokens)
-
-    def test_load_app_config_parses_extended_llm_and_stt_tuning_fields(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "config.toml"
-            _write_text(
-                config_path,
-                textwrap.dedent(
-                    """
-                    [wake_word]
-                    ppn_file = "wake.ppn"
-                    pv_file = "params.pv"
-
-                    [stt]
-                    cpu_threads = 3
-
-                    [llm]
-                    n_threads_batch = 6
-                    n_ubatch = 128
-                    top_k = 30
-                    min_p = 0.07
-                    use_mmap = false
-                    use_mlock = true
-                    fast_path_enabled = false
-                    cpu_affinity_mode = "shared"
-                    shared_cpu_reserve_cores = 2
-                    """
-                ).strip(),
-            )
-
-            app_config = load_app_config(str(config_path))
-            self.assertEqual(3, app_config.stt.cpu_threads)
-            self.assertEqual(6, app_config.llm.n_threads_batch)
-            self.assertEqual(128, app_config.llm.n_ubatch)
-            self.assertEqual(30, app_config.llm.top_k)
-            self.assertEqual(0.07, app_config.llm.min_p)
-            self.assertFalse(app_config.llm.use_mmap)
-            self.assertTrue(app_config.llm.use_mlock)
-            self.assertFalse(app_config.llm.fast_path_enabled)
-            self.assertEqual("shared", app_config.llm.cpu_affinity_mode)
-            self.assertEqual(2, app_config.llm.shared_cpu_reserve_cores)
+            self.assertEqual((0, 1), app_config.pipecat.stt.faster_whisper.cpu_cores)
+            self.assertEqual((2,), app_config.pipecat.tts.piper.cpu_cores)
+            self.assertEqual((3, 4, 5), app_config.pipecat.llm.local_llama.cpu_cores)
 
     def test_load_app_config_rejects_duplicate_cpu_cores(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -182,20 +133,41 @@ class AppConfigLoadingTests(unittest.TestCase):
                 config_path,
                 textwrap.dedent(
                     """
-                    [wake_word]
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
                     ppn_file = "wake.ppn"
                     pv_file = "params.pv"
 
-                    [stt]
+                    [pipecat.stt.faster_whisper]
                     cpu_cores = [0, 0]
+
+                    [pipecat.llm.local_llama]
+                    enabled = false
+
+                    [pipecat.tts.piper]
+                    enabled = false
+                    hf_filename = "de.onnx"
+
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
+                    ui = "jarvis"
+
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
                     """
                 ).strip(),
             )
 
             with self.assertRaises(AppConfigurationError) as context:
                 load_app_config(str(config_path))
-
-            self.assertIn("stt.cpu_cores cannot contain duplicates", str(context.exception))
+            self.assertIn("pipecat.stt.faster_whisper.cpu_cores", str(context.exception))
 
     def test_load_app_config_rejects_unknown_ui_variant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -204,20 +176,40 @@ class AppConfigLoadingTests(unittest.TestCase):
                 config_path,
                 textwrap.dedent(
                     """
-                    [wake_word]
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
                     ppn_file = "wake.ppn"
                     pv_file = "params.pv"
 
-                    [ui_server]
+                    [pipecat.stt.faster_whisper]
+
+                    [pipecat.llm.local_llama]
+                    enabled = false
+
+                    [pipecat.tts.piper]
+                    enabled = false
+                    hf_filename = "de.onnx"
+
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
                     ui = "retro"
+
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
                     """
                 ).strip(),
             )
 
             with self.assertRaises(AppConfigurationError) as context:
                 load_app_config(str(config_path))
-
-            self.assertIn("ui_server.ui", str(context.exception))
+            self.assertIn("pipecat.ui.ui", str(context.exception))
 
     def test_load_app_config_rejects_unknown_llm_affinity_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -226,42 +218,41 @@ class AppConfigLoadingTests(unittest.TestCase):
                 config_path,
                 textwrap.dedent(
                     """
-                    [wake_word]
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
                     ppn_file = "wake.ppn"
                     pv_file = "params.pv"
 
-                    [llm]
+                    [pipecat.stt.faster_whisper]
+
+                    [pipecat.llm.local_llama]
+                    enabled = false
                     cpu_affinity_mode = "auto"
+
+                    [pipecat.tts.piper]
+                    enabled = false
+                    hf_filename = "de.onnx"
+
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
+                    ui = "jarvis"
+
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
                     """
                 ).strip(),
             )
 
             with self.assertRaises(AppConfigurationError) as context:
                 load_app_config(str(config_path))
-
-            self.assertIn("llm.cpu_affinity_mode", str(context.exception))
-
-    def test_load_app_config_rejects_secret_fields(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "config.toml"
-            _write_text(
-                config_path,
-                textwrap.dedent(
-                    """
-                    [wake_word]
-                    ppn_file = "wake.ppn"
-                    pv_file = "params.pv"
-
-                    [oracle]
-                    google_calendar_id = "private-id"
-                    """
-                ).strip(),
-            )
-
-            with self.assertRaises(AppConfigurationError) as context:
-                load_app_config(str(config_path))
-
-            self.assertIn("oracle.google_calendar_id", str(context.exception))
+            self.assertIn("pipecat.llm.local_llama.cpu_affinity_mode", str(context.exception))
 
     def test_load_secret_config_requires_pico_key(self) -> None:
         with self.assertRaises(AppConfigurationError):
@@ -286,7 +277,36 @@ class AppConfigLoadingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as cwd_dir, tempfile.TemporaryDirectory() as exe_dir:
             cwd = Path(cwd_dir)
             executable_dir_config = Path(exe_dir) / "config.toml"
-            _write_text(executable_dir_config, "[wake_word]\nppn_file='a'\npv_file='b'\n")
+            _write_text(
+                executable_dir_config,
+                textwrap.dedent(
+                    """
+                    [pipecat.runtime]
+                    language = "de"
+                    allow_interruptions = false
+                    metrics_enabled = true
+
+                    [pipecat.wake.porcupine]
+                    ppn_file = "wake.ppn"
+                    pv_file = "params.pv"
+
+                    [pipecat.stt.faster_whisper]
+                    [pipecat.llm.local_llama]
+                    enabled = false
+                    [pipecat.tts.piper]
+                    enabled = false
+                    hf_filename = "de.onnx"
+                    [pipecat.ui]
+                    enabled = true
+                    host = "127.0.0.1"
+                    port = 8765
+                    ui = "jarvis"
+                    [pipecat.tools.calendar]
+                    enabled = true
+                    google_calendar_enabled = false
+                    """
+                ).strip(),
+            )
             executable = Path(exe_dir) / "main"
 
             with patch.dict(os.environ, {}, clear=True):

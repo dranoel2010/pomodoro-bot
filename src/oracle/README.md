@@ -11,7 +11,7 @@ Optional environment-context providers used to enrich LLM context and support ca
 - `calendar/`: Google Calendar client wrapper.
 
 ## Configuration
-From `config.toml` (`[oracle]`):
+From `config.toml` (`[pipecat.tools.calendar]`):
 - `enabled`
 - `ens160_enabled`
 - `temt6000_enabled`

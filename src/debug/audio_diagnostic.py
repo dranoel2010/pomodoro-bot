@@ -30,7 +30,7 @@ def main():
         secret_config = load_secret_config()
         config = WakeWordConfig.from_settings(
             pico_voice_access_key=secret_config.pico_voice_access_key,
-            settings=app_config.wake_word,
+            settings=app_config.pipecat.wake.porcupine,
         )
     except (AppConfigurationError, ConfigurationError) as e:
         print(f"Error: {e}")
