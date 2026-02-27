@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
+from functools import partial
 import logging
 import multiprocessing
 import signal
@@ -8,7 +10,7 @@ import time
 from logging.handlers import QueueListener
 from multiprocessing.queues import Queue as MPQueue
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import Callable
 
 from app_config import (
     AppConfig,
@@ -23,13 +25,11 @@ from oracle.factory import create_oracle_service
 from server.factory import create_ui_server
 from llm.config import ConfigurationError as LLMConfigurationError
 from llm.config import LLMConfig
+from runtime.ports import WakeWordServicePort
 from runtime.process_workers import ProcessLLMClient, ProcessSTTClient, ProcessTTSClient
 from stt.config import ConfigurationError as STTConfigurationError
 from stt.config import STTConfig, WakeWordConfig
 from tts.config import TTSConfig, TTSConfigurationError
-
-if TYPE_CHECKING:
-    from stt.service import WakeWordService
 
 LogQueue = MPQueue[object]
 
@@ -45,7 +45,7 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     return logging.getLogger("wake_word_app")
 
 
-def setup_signal_handlers(service: WakeWordService) -> None:
+def setup_signal_handlers(service: WakeWordServicePort) -> None:
     logger = logging.getLogger("wake_word_app")
 
     def signal_handler(signum: int, frame: FrameType | None) -> None:
@@ -62,7 +62,10 @@ def setup_signal_handlers(service: WakeWordService) -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
 
-def _wait_for_service_ready_callback(service: WakeWordService, timeout: float = 10.0) -> bool:
+def _wait_for_service_ready_callback(
+    service: WakeWordServicePort,
+    timeout: float = 10.0,
+) -> bool:
     deadline = time.monotonic() + timeout
     poll_interval_seconds = 0.25
 
@@ -107,139 +110,164 @@ def _load_runtime_engine():
     return PipecatRuntimeEngine
 
 
+def _close_with_log(
+    name: str,
+    close_fn: Callable[[], None],
+    logger: logging.Logger,
+) -> None:
+    try:
+        close_fn()
+    except Exception as error:
+        logger.error("Failed to close %s: %s", name, error)
+
+
 def main() -> int:
     logger = setup_logging(level=logging.INFO)
-    wake_word_config = None
-    stt_client = None
-    speech_service = None
-    assistant_llm = None
-    oracle_service = None
-    ui_server = None
-    log_listener: QueueListener | None = None
+    with ExitStack() as cleanup:
+        try:
+            log_queue, log_listener = _start_log_listener()
+            cleanup.callback(
+                _close_with_log,
+                "log listener",
+                log_listener.stop,
+                logger,
+            )
 
-    try:
-        log_queue, log_listener = _start_log_listener()
-        app_config, secret_config = _load_runtime_config(logger)
-        log_level = logging.getLogger().getEffectiveLevel()
+            app_config, secret_config = _load_runtime_config(logger)
+            log_level = logging.getLogger().getEffectiveLevel()
 
-        wake_settings = app_config.pipecat.wake.porcupine
-        stt_settings = app_config.pipecat.stt.faster_whisper
-        llm_settings = app_config.pipecat.llm.local_llama
-        tts_settings = app_config.pipecat.tts.piper
-        calendar_settings = app_config.pipecat.tools.calendar
-        ui_settings = app_config.pipecat.ui
+            wake_settings = app_config.pipecat.wake.porcupine
+            stt_settings = app_config.pipecat.stt.faster_whisper
+            llm_settings = app_config.pipecat.llm.local_llama
+            tts_settings = app_config.pipecat.tts.piper
+            calendar_settings = app_config.pipecat.tools.calendar
+            ui_settings = app_config.pipecat.ui
 
-        wake_word_config = WakeWordConfig.from_settings(
-            pico_voice_access_key=secret_config.pico_voice_access_key,
-            settings=wake_settings,
-        )
-        stt_config = STTConfig.from_settings(stt_settings)
-        stt_client = ProcessSTTClient(
-            config=stt_config,
-            cpu_cores=stt_settings.cpu_cores,
-            logger=logging.getLogger("stt.process"),
-            log_queue=log_queue,
-            log_level=log_level,
-        )
-
-        if tts_settings.enabled:
-            speech_service = ProcessTTSClient(
-                config=TTSConfig.from_settings(tts_settings),
-                cpu_cores=tts_settings.cpu_cores,
-                logger=logging.getLogger("tts.process"),
+            wake_word_config = WakeWordConfig.from_settings(
+                pico_voice_access_key=secret_config.pico_voice_access_key,
+                settings=wake_settings,
+            )
+            stt_client = ProcessSTTClient(
+                config=STTConfig.from_settings(stt_settings),
+                cpu_cores=stt_settings.cpu_cores,
+                logger=logging.getLogger("stt.process"),
                 log_queue=log_queue,
                 log_level=log_level,
             )
-
-        if llm_settings.enabled:
-            llm_config = LLMConfig.from_sources(
-                model_dir=llm_settings.model_path,
-                hf_filename=llm_settings.hf_filename,
-                hf_repo_id=llm_settings.hf_repo_id or None,
-                hf_revision=llm_settings.hf_revision or None,
-                hf_token=secret_config.hf_token,
-                system_prompt_path=llm_settings.system_prompt or None,
-                max_tokens=llm_settings.max_tokens,
-                n_threads=llm_settings.n_threads,
-                n_threads_batch=llm_settings.n_threads_batch,
-                n_ctx=llm_settings.n_ctx,
-                n_batch=llm_settings.n_batch,
-                n_ubatch=llm_settings.n_ubatch,
-                temperature=llm_settings.temperature,
-                top_p=llm_settings.top_p,
-                top_k=llm_settings.top_k,
-                min_p=llm_settings.min_p,
-                repeat_penalty=llm_settings.repeat_penalty,
-                use_mmap=llm_settings.use_mmap,
-                use_mlock=llm_settings.use_mlock,
-                verbose=llm_settings.verbose,
-                logger=logging.getLogger("llm.config"),
-            )
-            assistant_llm = ProcessLLMClient(
-                config=llm_config,
-                cpu_cores=llm_settings.cpu_cores,
-                cpu_affinity_mode=llm_settings.cpu_affinity_mode,
-                shared_cpu_reserve_cores=llm_settings.shared_cpu_reserve_cores,
-                logger=logging.getLogger("llm.process"),
-                log_queue=log_queue,
-                log_level=log_level,
-            )
-            logger.info("LLM enabled (model: %s)", llm_config.model_path)
-
-        if assistant_llm is None and speech_service is not None:
-            logger.warning(
-                "TTS is enabled but LLM is disabled; no spoken reply will be generated."
+            cleanup.callback(
+                _close_with_log,
+                "STT process client",
+                partial(stt_client.close, timeout_seconds=5.0),
+                logger,
             )
 
-        if assistant_llm is not None:
-            oracle_service = create_oracle_service(
-                oracle=calendar_settings,
-                calendar_id=secret_config.oracle_google_calendar_id,
-                service_account_file=secret_config.oracle_google_service_account_file,
+            speech_service = None
+            if tts_settings.enabled:
+                speech_service = ProcessTTSClient(
+                    config=TTSConfig.from_settings(tts_settings),
+                    cpu_cores=tts_settings.cpu_cores,
+                    logger=logging.getLogger("tts.process"),
+                    log_queue=log_queue,
+                    log_level=log_level,
+                )
+                cleanup.callback(
+                    _close_with_log,
+                    "TTS process client",
+                    partial(speech_service.close, timeout_seconds=5.0),
+                    logger,
+                )
+
+            assistant_llm = None
+            if llm_settings.enabled:
+                llm_config = LLMConfig.from_sources(
+                    model_dir=llm_settings.model_path,
+                    hf_filename=llm_settings.hf_filename,
+                    hf_repo_id=llm_settings.hf_repo_id or None,
+                    hf_revision=llm_settings.hf_revision or None,
+                    hf_token=secret_config.hf_token,
+                    system_prompt_path=llm_settings.system_prompt or None,
+                    max_tokens=llm_settings.max_tokens,
+                    n_threads=llm_settings.n_threads,
+                    n_threads_batch=llm_settings.n_threads_batch,
+                    n_ctx=llm_settings.n_ctx,
+                    n_batch=llm_settings.n_batch,
+                    n_ubatch=llm_settings.n_ubatch,
+                    temperature=llm_settings.temperature,
+                    top_p=llm_settings.top_p,
+                    top_k=llm_settings.top_k,
+                    min_p=llm_settings.min_p,
+                    repeat_penalty=llm_settings.repeat_penalty,
+                    use_mmap=llm_settings.use_mmap,
+                    use_mlock=llm_settings.use_mlock,
+                    verbose=llm_settings.verbose,
+                    logger=logging.getLogger("llm.config"),
+                )
+                assistant_llm = ProcessLLMClient(
+                    config=llm_config,
+                    cpu_cores=llm_settings.cpu_cores,
+                    cpu_affinity_mode=llm_settings.cpu_affinity_mode,
+                    shared_cpu_reserve_cores=llm_settings.shared_cpu_reserve_cores,
+                    logger=logging.getLogger("llm.process"),
+                    log_queue=log_queue,
+                    log_level=log_level,
+                )
+                cleanup.callback(
+                    _close_with_log,
+                    "LLM process client",
+                    partial(assistant_llm.close, timeout_seconds=5.0),
+                    logger,
+                )
+                logger.info("LLM enabled (model: %s)", llm_config.model_path)
+
+            if assistant_llm is None and speech_service is not None:
+                logger.warning(
+                    "TTS is enabled but LLM is disabled; no spoken reply will be generated."
+                )
+
+            oracle_service = None
+            if assistant_llm is not None:
+                oracle_service = create_oracle_service(
+                    oracle=calendar_settings,
+                    calendar_id=secret_config.oracle_google_calendar_id,
+                    service_account_file=secret_config.oracle_google_service_account_file,
+                    logger=logger,
+                )
+
+            ui_server = create_ui_server(ui=ui_settings, logger=logger)
+            if ui_server is not None:
+                cleanup.callback(
+                    _close_with_log,
+                    "UI server",
+                    partial(ui_server.stop, timeout_seconds=5.0),
+                    logger,
+                )
+
+            runtime_engine = _load_runtime_engine()(
                 logger=logger,
+                app_config=app_config,
+                wake_word_config=wake_word_config,
+                stt=stt_client,
+                assistant_llm=assistant_llm,
+                speech_service=speech_service,
+                oracle_service=oracle_service,
+                ui_server=ui_server,
+                setup_signal_handlers=setup_signal_handlers,
+                wait_for_service_ready=_wait_for_service_ready_callback,
             )
-
-        ui_server = create_ui_server(ui=ui_settings, logger=logger)
-
-        return _load_runtime_engine()(
-            logger=logger,
-            app_config=app_config,
-            wake_word_config=wake_word_config,
-            stt=stt_client,
-            assistant_llm=assistant_llm,
-            speech_service=speech_service,
-            oracle_service=oracle_service,
-            ui_server=ui_server,
-            setup_signal_handlers=setup_signal_handlers,
-            wait_for_service_ready=_wait_for_service_ready_callback,
-        ).run()
-    except (STTConfigurationError, LLMConfigurationError, TTSConfigurationError) as error:
-        logger.error("Runtime configuration error: %s", error)
-        return 1
-    except StartupError as error:
-        logger.error("%s", error)
-        return 1
-    except Exception:
-        logger.exception("Unhandled startup failure")
-        return 1
-    finally:
-        if assistant_llm is not None:
-            try:
-                assistant_llm.close()
-            except Exception as error:
-                logger.error("Failed to close LLM process client: %s", error)
-        if speech_service is not None:
-            try:
-                speech_service.close()
-            except Exception as error:
-                logger.error("Failed to close TTS process client: %s", error)
-        if stt_client is not None:
-            try:
-                stt_client.close()
-            except Exception as error:
-                logger.error("Failed to close STT process client: %s", error)
-        if log_listener is not None:
-            log_listener.stop()
+            return runtime_engine.run()
+        except (
+            STTConfigurationError,
+            LLMConfigurationError,
+            TTSConfigurationError,
+        ) as error:
+            logger.error("Runtime configuration error: %s", error)
+            return 1
+        except StartupError as error:
+            logger.error("%s", error)
+            return 1
+        except Exception:
+            logger.exception("Unhandled startup failure")
+            return 1
 
 
 if __name__ == "__main__":

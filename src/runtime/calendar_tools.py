@@ -16,7 +16,7 @@ from shared.defaults import (
 from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_EVENTS
 
 if TYPE_CHECKING:
-    from oracle.service import OracleContextService
+    from .ports import OracleContextClient
 
 
 def parse_duration_seconds(value: object, *, default_seconds: int) -> int:
@@ -203,7 +203,7 @@ def handle_calendar_tool_call(
     *,
     tool_name: str,
     arguments: dict[str, object],
-    oracle_service: "OracleContextService" | None,
+    oracle_service: "OracleContextClient" | None,
     calendar_max_results: int,
     logger: logging.Logger,
 ) -> str:

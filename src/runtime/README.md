@@ -4,10 +4,13 @@
 Pipecat-only orchestration loop that connects wake-word events, STT/LLM/TTS stages, tool dispatch, and UI updates.
 
 ## Key files
-- `pipecat_engine.py`: `PipecatRuntimeEngine` lifecycle, wake-word event loop, and Pipecat pipeline bridge.
+- `pipecat_engine.py`: top-level runtime orchestration and wake-word event handling.
+- `pipeline_bridge.py`: Pipecat thread lifecycle and pending utterance queueing.
+- `utterance_handler.py`: STT -> LLM -> tool dispatch -> TTS utterance flow.
 - `tool_dispatch.py`: timer/pomodoro/calendar tool call execution.
 - `ticks.py`: completion/tick handling for timers.
 - `ui.py`: UI publishing facade.
+- `ports.py`: runtime-facing protocol interfaces.
 - `messages.py`: default German status and fallback messaging.
 - `calendar_tools.py`: calendar argument parsing and runtime handlers.
 

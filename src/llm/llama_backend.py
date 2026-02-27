@@ -3,7 +3,14 @@
 from dataclasses import dataclass
 from typing import Any
 
-from contracts.tool_contract import tool_name_gbnf_alternatives
+from contracts.tool_contract import (
+    TOOL_ADD_CALENDAR_EVENT,
+    TOOL_NAME_ORDER,
+    TOOL_SHOW_UPCOMING_EVENTS,
+    TOOL_START_POMODORO,
+    TOOL_START_TIMER,
+    TOOLS_WITHOUT_ARGUMENTS,
+)
 
 from .config import LLMConfig
 
@@ -15,13 +22,13 @@ toolcall ::= "null" | toolobj
 
 toolobj ::= timer-obj | pomodoro-obj | calendar-show-obj | calendar-add-obj | empty-obj
 
-timer-obj ::= "{" ws "\"name\"" ws ":" ws "\"start_timer\"" ws "," ws "\"arguments\"" ws ":" ws timer-args ws "}"
-pomodoro-obj ::= "{" ws "\"name\"" ws ":" ws "\"start_pomodoro_session\"" ws "," ws "\"arguments\"" ws ":" ws pomodoro-args ws "}"
-calendar-show-obj ::= "{" ws "\"name\"" ws ":" ws "\"show_upcoming_events\"" ws "," ws "\"arguments\"" ws ":" ws calendar-show-args ws "}"
-calendar-add-obj ::= "{" ws "\"name\"" ws ":" ws "\"add_calendar_event\"" ws "," ws "\"arguments\"" ws ":" ws calendar-add-args ws "}"
+timer-obj ::= "{" ws "\"name\"" ws ":" ws "\"__TOOL_START_TIMER__\"" ws "," ws "\"arguments\"" ws ":" ws timer-args ws "}"
+pomodoro-obj ::= "{" ws "\"name\"" ws ":" ws "\"__TOOL_START_POMODORO__\"" ws "," ws "\"arguments\"" ws ":" ws pomodoro-args ws "}"
+calendar-show-obj ::= "{" ws "\"name\"" ws ":" ws "\"__TOOL_SHOW_UPCOMING_EVENTS__\"" ws "," ws "\"arguments\"" ws ":" ws calendar-show-args ws "}"
+calendar-add-obj ::= "{" ws "\"name\"" ws ":" ws "\"__TOOL_ADD_CALENDAR_EVENT__\"" ws "," ws "\"arguments\"" ws ":" ws calendar-add-args ws "}"
 empty-obj ::= "{" ws "\"name\"" ws ":" ws empty-name ws "," ws "\"arguments\"" ws ":" ws empty-args ws "}"
 
-empty-name ::= "\"stop_timer\"" | "\"pause_timer\"" | "\"continue_timer\"" | "\"reset_timer\"" | "\"stop_pomodoro_session\"" | "\"pause_pomodoro_session\"" | "\"continue_pomodoro_session\"" | "\"reset_pomodoro_session\""
+empty-name ::= __EMPTY_TOOL_NAMES__
 
 timer-args        ::= "{" ws "\"duration\"" ws ":" ws string ws "}"
 pomodoro-args     ::= "{" ws "\"focus_topic\"" ws ":" ws string ws "}"
@@ -51,12 +58,30 @@ class CompletionUsage:
     raw_usage: dict[str, object] | None
 
 
+def _gbnf_tool_name_literal(tool_name: str) -> str:
+    return f'"\\\"{tool_name}\\\""'
+
+
 def build_gbnf_schema() -> str:
     """Build the runtime GBNF schema with current canonical tool names."""
-    return GBNF_SCHEMA_TEMPLATE.replace(
-        "__TOOLNAME_ALTERNATIVES__",
-        tool_name_gbnf_alternatives(),
+    empty_tool_names = tuple(
+        name for name in TOOL_NAME_ORDER if name in TOOLS_WITHOUT_ARGUMENTS
     )
+    empty_tool_names_alternatives = " | ".join(
+        _gbnf_tool_name_literal(name) for name in empty_tool_names
+    )
+
+    replacements = {
+        "__TOOL_START_TIMER__": TOOL_START_TIMER,
+        "__TOOL_START_POMODORO__": TOOL_START_POMODORO,
+        "__TOOL_SHOW_UPCOMING_EVENTS__": TOOL_SHOW_UPCOMING_EVENTS,
+        "__TOOL_ADD_CALENDAR_EVENT__": TOOL_ADD_CALENDAR_EVENT,
+        "__EMPTY_TOOL_NAMES__": empty_tool_names_alternatives,
+    }
+    schema = GBNF_SCHEMA_TEMPLATE
+    for placeholder, value in replacements.items():
+        schema = schema.replace(placeholder, value)
+    return schema
 
 
 class LlamaBackend:

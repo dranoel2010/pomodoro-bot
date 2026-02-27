@@ -71,6 +71,14 @@ class ResponseParser:
             "tool_call": inferred,
         }
 
+    def infer_tool_call_from_prompt(self, user_prompt: str) -> ToolCall | None:
+        """Infer a tool call directly from a raw user prompt."""
+        return self._infer_tool_call_from_prompt(user_prompt)
+
+    def fallback_assistant_text(self, tool_call: ToolCall | None) -> str:
+        """Build deterministic fallback assistant text for an inferred tool call."""
+        return self._fallback_assistant_text(tool_call)
+
     def _load_json_object(self, content: str) -> dict[str, Any] | None:
         text = content.strip()
         if not text:

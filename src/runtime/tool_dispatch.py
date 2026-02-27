@@ -31,11 +31,11 @@ from .messages import (
     timer_rejection_text,
     timer_status_message,
 )
+from .ports import OracleContextClient
 from .ui import RuntimeUIPublisher
 
 if TYPE_CHECKING:
     from app_config import AppConfig
-    from oracle.service import OracleContextService
 
 
 class RuntimeToolDispatcher:
@@ -45,7 +45,7 @@ class RuntimeToolDispatcher:
         *,
         logger: logging.Logger,
         app_config: "AppConfig",
-        oracle_service: "OracleContextService" | None,
+        oracle_service: OracleContextClient | None,
         pomodoro_timer: PomodoroTimer,
         countdown_timer: PomodoroTimer,
         ui: RuntimeUIPublisher,

@@ -4,6 +4,7 @@ import concurrent.futures
 import logging
 import multiprocessing
 import os
+import threading
 from dataclasses import replace
 from logging.handlers import QueueHandler
 from typing import TYPE_CHECKING, Any, Callable
@@ -245,11 +246,30 @@ class _ProcessWorker:
             raise RuntimeError(f"{self._name} worker timed out.") from error
 
     def close(self, timeout_seconds: float = 5.0) -> None:
-        del timeout_seconds
         if self._closed:
             return
         self._closed = True
-        self._executor.shutdown(wait=False, cancel_futures=True)
+
+        shutdown_completed = threading.Event()
+
+        def _shutdown() -> None:
+            try:
+                self._executor.shutdown(wait=True, cancel_futures=True)
+            finally:
+                shutdown_completed.set()
+
+        threading.Thread(
+            target=_shutdown,
+            name=f"{self._name}-shutdown",
+            daemon=True,
+        ).start()
+
+        if timeout_seconds > 0 and not shutdown_completed.wait(timeout_seconds):
+            self._logger.warning(
+                "%s shutdown exceeded %.1fs; allowing background cleanup to continue.",
+                self._name,
+                timeout_seconds,
+            )
 
 
 def _llm_config_for_worker(
