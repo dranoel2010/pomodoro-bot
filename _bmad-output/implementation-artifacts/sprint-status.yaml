@@ -43,7 +43,7 @@ development_status:
   # ─── Epic 1: Clean Architecture Foundation (Phase 1) ───────────────────────
   epic-1: in-progress
   1-1-contracts-layer-consolidation: done
-  1-2-configuration-boundary-enforcement: backlog
+  1-2-configuration-boundary-enforcement: done
   1-3-llm-module-boundaries-module-naming-corrections: backlog
   1-4-frozen-value-objects-structural-pattern-matching-dispatch: backlog
   1-5-hardware-free-test-suite-verification: backlog

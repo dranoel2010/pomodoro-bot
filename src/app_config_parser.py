@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -21,12 +22,17 @@ _ALLOWED_LLM_AFFINITY_MODES = {"pinned", "shared"}
 
 
 def parse_app_config(
-    raw: Mapping[str, Any],
+    content: bytes,
     *,
     base_dir: Path,
     source_file: str,
 ) -> AppConfig:
-    """Parse raw TOML mappings into strongly typed application settings."""
+    """Parse raw TOML bytes into strongly typed application settings."""
+    try:
+        raw: Mapping[str, Any] = tomllib.loads(content.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
+        raise AppConfigurationError(f"Failed to parse config TOML: {error}") from error
+
     wake_word = _parse_wake_word_settings(_section(raw, "wake_word"), base_dir=base_dir)
     stt = _parse_stt_settings(_section(raw, "stt"))
     tts = _parse_tts_settings(_section(raw, "tts"), base_dir=base_dir)

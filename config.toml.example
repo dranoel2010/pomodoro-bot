@@ -1,0 +1,76 @@
+[wake_word]
+ppn_file = "models/sst/hey-pomo.ppn"
+pv_file = "models/sst/porcupine_params_de.pv"
+
+adaptive_threshold_multiplier = 1.5
+device_index = 0
+energy_threshold = 100
+max_utterance_seconds = 10.0
+min_speech_seconds = 0.15
+no_speech_timeout_seconds = 3.0
+noise_floor_calibration_seconds = 1.0
+silence_timeout_seconds = 1.5
+validate_paths = true
+
+[stt]
+beam_size = 5
+compute_type = "int8"
+device = "cpu"
+language = "de"
+model_size = "small"
+vad_filter = true
+# cpu_cores: CPU core(s) to pin the STT worker process to (default: [] — no pinning, OS schedules freely)
+# Pi 5 recommended: [0] or [0, 1] — STT runs best isolated from LLM cores
+cpu_cores = []
+
+[tts]
+enabled = true
+hf_filename = "de_DE-thorsten-high.onnx"
+hf_repo_id = "Thorsten-Voice/Piper"
+hf_revision = "main"
+model_path = "models/tts/thorsten-piper"
+gpu = false
+# output_device = 0
+# cpu_cores: CPU core(s) to pin the TTS worker process to (default: [] — no pinning)
+# Pi 5 recommended: [3] or [2, 3] — keep TTS on its own core(s) away from STT and LLM
+cpu_cores = []
+
+[llm]
+enabled = true
+model_path = "models/llm/qwen"
+hf_filename = "Qwen3-1.7B-Q4_K_M.gguf"
+hf_repo_id = "lm-kit/qwen-3-1.7b-instruct-gguf"
+hf_revision = "main"
+# cpu_cores: CPU core(s) available to the LLM worker process (default: [] — no pinning)
+# Used when cpu_affinity_mode = "pinned"; ignored in "shared" mode (OS schedules across all non-reserved cores)
+# Pi 5 recommended (pinned): [1, 2] — leave core 0 for STT and core 3 for TTS
+cpu_cores = []
+n_batch = 256
+n_ctx = 2048
+n_threads = 4
+repeat_penalty = 1.1
+system_prompt = "prompts/system_prompt.md"
+temperature = 0.2
+top_p = 0.9
+verbose = false
+
+[ui_server]
+enabled = true
+host = "127.0.0.1"
+port = 8765
+ui = "miro"
+
+[oracle]
+calendar_cache_ttl_seconds = 60
+enabled = true
+ens160_enabled = false
+ens160_humidity_compensation_pct = 50
+ens160_temperature_compensation_c = 25
+google_calendar_enabled = true
+google_calendar_max_results = 5
+sensor_cache_ttl_seconds = 15
+temt6000_adc_address = "0x48"
+temt6000_busnum = 1
+temt6000_channel = 0
+temt6000_enabled = false
+temt6000_gain = 1

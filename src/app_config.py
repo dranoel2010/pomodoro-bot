@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-import tomllib
 from pathlib import Path
 from typing import Mapping
 
@@ -29,6 +28,7 @@ from app_config_schema import (
     UIServerSettings,
     WakeWordSettings,
 )
+
 
 def resolve_config_path(config_path: str | None = None) -> Path:
     """Resolve the config file path from argument, environment, or default location."""
@@ -61,16 +61,12 @@ def load_app_config(config_path: str | None = None) -> AppConfig:
         raise AppConfigurationError(f"Config path is not a file: {path}")
 
     try:
-        with open(path, "rb") as fh:
-            raw = tomllib.load(fh)
-    except Exception as error:
-        raise AppConfigurationError(f"Failed to parse config TOML: {error}") from error
-
-    if not isinstance(raw, Mapping):
-        raise AppConfigurationError("Root config TOML object must be a table.")
+        content = path.read_bytes()
+    except OSError as error:
+        raise AppConfigurationError(f"Failed to read config file: {error}") from error
 
     return parse_app_config(
-        raw,
+        content,
         base_dir=path.parent,
         source_file=str(path),
     )
