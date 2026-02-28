@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import logging
-import multiprocessing
 import os
 from dataclasses import dataclass, replace
 from multiprocessing.queues import Queue as MPQueue
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from contracts import StartupError
 from llm.config import ConfigurationError
 from llm.factory import create_llm_config
 
-from .core import _ProcessWorker, _configure_worker_logging, _set_process_cpu_affinity
+from .core import _ProcessWorker
 
 if TYPE_CHECKING:
     from llm.config import LLMConfig
@@ -46,43 +45,18 @@ class _LLMProcess:
 
         self._llm = PomodoroAssistantLLM(config)
 
-    def run(
-        self,
-        user_prompt: str,
-        env: EnvironmentContext | None,
-        extra_context: str | None,
-        max_tokens: int | None,
-    ) -> StructuredResponse:
+    def handle(self, payload: object) -> object:
+        if not isinstance(payload, LLMPayload):
+            raise ValueError(f"Expected LLMPayload, got {type(payload).__name__}")
         return self._llm.run(
-            user_prompt,
-            env=env,
-            extra_context=extra_context,
-            max_tokens=max_tokens,
+            payload.user_prompt,
+            env=payload.env,
+            extra_context=payload.extra_context,
+            max_tokens=payload.max_tokens,
         )
 
-
-# Module-level slot for the in-process instance.
-# This is intentional: multiprocessing initializers have no other
-# clean way to pass state to the task function.
-_process_instance: _LLMProcess | None = None
-
-
-def _init_llm_worker(
-    worker_config: _WorkerConfig,
-    log_queue: multiprocessing.Queue[object] | None,
-    log_level: int,
-) -> None:
-    global _process_instance
-
-    _configure_worker_logging(log_queue=log_queue, log_level=log_level)
-    logger = logging.getLogger("llm.worker")
-    _set_process_cpu_affinity(worker_config.cpu_cores, logger=logger)
-    _process_instance = _LLMProcess(worker_config.llm_config)
-
-
-# ---------------------------------------------------------------------------
-# Task payload
-# ---------------------------------------------------------------------------
+def _create_llm_process(worker_config: _WorkerConfig) -> _LLMProcess:
+    return _LLMProcess(worker_config.llm_config)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,17 +65,6 @@ class LLMPayload:
     env: EnvironmentContext | None = None
     extra_context: str | None = None
     max_tokens: int | None = None
-
-
-def _llm_task(payload: LLMPayload) -> StructuredResponse:
-    if _process_instance is None:
-        raise RuntimeError("LLM worker was not initialized.")
-    return _process_instance.run(
-        payload.user_prompt,
-        env=payload.env,
-        extra_context=payload.extra_context,
-        max_tokens=payload.max_tokens,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +165,7 @@ class LLMWorker:
         cpu_affinity_mode: str = "pinned",
         shared_cpu_reserve_cores: int = 1,
         logger: logging.Logger | None = None,
-        log_queue: multiprocessing.Queue[object] | None = None,
+        log_queue: MPQueue | None = None,
         log_level: int = logging.INFO,
     ) -> None:
         worker_logger = logger or logging.getLogger("llm.process")
@@ -215,9 +178,11 @@ class LLMWorker:
         )
         self._worker = _ProcessWorker(
             name="llm-worker",
-            task=_llm_task,
-            initializer=_init_llm_worker,
-            init_args=(worker_config, log_queue, log_level),
+            runtime_factory=_create_llm_process,
+            runtime_args=(worker_config,),
+            cpu_cores=worker_config.cpu_cores,
+            log_queue=log_queue,
+            log_level=log_level,
             logger=worker_logger,
         )
 
@@ -235,7 +200,7 @@ class LLMWorker:
             extra_context=extra_context,
             max_tokens=max_tokens,
         )
-        return self._worker.call(payload)
+        return cast("StructuredResponse", self._worker.call(payload))
 
     def close(self, timeout_seconds: float = _DEFAULT_CLOSE_TIMEOUT) -> None:
         self._worker.close(timeout_seconds=timeout_seconds)
@@ -288,5 +253,5 @@ def create_llm_worker(
         raise StartupError(f"LLM module import error: {exc}") from exc
     except Exception as exc:
         raise StartupError(
-            f"LLM initialisation failed: {type(exc).__name__}: {exc}"
+            f"LLM initialization failed: {type(exc).__name__}: {exc}"
         ) from exc

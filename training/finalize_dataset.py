@@ -7,6 +7,7 @@ import argparse
 import json
 import random
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--min-reviewed", type=int, default=2000)
     parser.add_argument("--acceptance-threshold", type=float, default=0.97)
     parser.add_argument("--per-intent-threshold", type=float, default=0.95)
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=0,
+        help="Progress log cadence in records during merge pass (0 = auto)",
+    )
     parser.add_argument(
         "--review-report",
         default="training/reports/review_outcomes_v1.json",
@@ -153,6 +160,20 @@ def main() -> int:
     reviewed = _load_jsonl(Path(args.reviewed))
 
     decisions = _review_decisions(reviewed)
+    total_validated = len(validated)
+    progress_every = (
+        args.progress_every
+        if args.progress_every > 0
+        else max(1000, total_validated // 100 if total_validated else 1)
+    )
+    started_at = time.perf_counter()
+
+    print(
+        "Starting finalize merge: "
+        f"validated={total_validated} reviewed_rows={len(reviewed)} "
+        f"target_size={args.target_size}",
+        flush=True,
+    )
 
     reviewed_count = 0
     accepted_count = 0
@@ -161,10 +182,28 @@ def main() -> int:
     accepted_records: list[dict[str, Any]] = []
     unresolved_disagreements = 0
 
-    for row in validated:
+    def _maybe_log_progress(current_index: int) -> None:
+        if current_index % progress_every != 0 and current_index != total_validated:
+            return
+        elapsed = max(time.perf_counter() - started_at, 1e-9)
+        rate = current_index / elapsed
+        remaining = max(total_validated - current_index, 0)
+        eta = remaining / rate if rate > 0 else 0.0
+        percent = (current_index / total_validated) * 100.0 if total_validated else 100.0
+        print(
+            "progress(finalize-merge): "
+            f"{current_index}/{total_validated} ({percent:.1f}%) "
+            f"accepted_pool={len(accepted_records)} reviewed_hits={reviewed_count} "
+            f"unresolved_disagreements={unresolved_disagreements} "
+            f"rate={rate:.1f} rec/s eta={eta:.1f}s",
+            flush=True,
+        )
+
+    for idx, row in enumerate(validated, start=1):
         record = json.loads(stable_json_dumps(row))
         rec_id = str(record.get("id") or "")
         if not rec_id:
+            _maybe_log_progress(idx)
             continue
 
         quality = record.get("quality")
@@ -183,6 +222,7 @@ def main() -> int:
             if reviewed_action == "reject":
                 quality["human_reviewed"] = True
                 quality["human_label_ok"] = False
+                _maybe_log_progress(idx)
                 continue
 
             if reviewed_action == "fix":
@@ -209,12 +249,15 @@ def main() -> int:
         critic_pass = bool(quality.get("critic_pass", False))
         if not critic_pass and reviewed_action not in {"accept", "fix"}:
             unresolved_disagreements += 1
+            _maybe_log_progress(idx)
             continue
 
         if not bool(quality.get("validator_pass", False)):
+            _maybe_log_progress(idx)
             continue
 
         accepted_records.append(record)
+        _maybe_log_progress(idx)
 
     acceptance_rate = (accepted_count / reviewed_count) if reviewed_count else 0.0
 
@@ -256,6 +299,7 @@ def main() -> int:
         target_size=args.target_size,
         seed=args.seed,
     )
+    print(f"Finalize sampling complete: sampled_records={len(sampled)}", flush=True)
 
     split_sizes = dict(DEFAULT_SPLIT_SIZES)
     if args.target_size != TARGET_DATASET_SIZE:
@@ -268,6 +312,11 @@ def main() -> int:
         }
 
     split_rows = stratified_split(sampled, split_sizes=split_sizes, seed=args.seed)
+    print(
+        "Finalize split complete: "
+        f"train={len(split_rows['train'])} val={len(split_rows['val'])} test={len(split_rows['test'])}",
+        flush=True,
+    )
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

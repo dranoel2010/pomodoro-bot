@@ -36,6 +36,16 @@ Generate raw candidates:
 uv run python training/generate_dataset.py --target-size 60000 --teacher <model_id>
 ```
 
+Use local GPU teacher with Ollama:
+
+```bash
+uv run python training/generate_dataset.py --target-size 60000 --teacher qwen3:14b --teacher-provider ollama
+```
+
+Notes:
+- Ollama endpoint defaults to `http://127.0.0.1:11434`
+- Override with `OLLAMA_HOST`, for example `http://localhost:11434`
+
 Validate and filter:
 
 ```bash
@@ -69,3 +79,14 @@ uv run python training/report_dataset.py --in training/data/final --out training
 - `review.fixed_target`: required when `action=fix`
 
 Queue builder initializes these fields as empty placeholders.
+
+## Progress Logging
+
+Long-running commands print progress by default. You can tune cadence with:
+
+- `--progress-every <n>` on:
+  - `generate_dataset.py`
+  - `validate_dataset.py`
+  - `finalize_dataset.py`
+
+Set `--progress-every 1000` to print every 1000 processed records.

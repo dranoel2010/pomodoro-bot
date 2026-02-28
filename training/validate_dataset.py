@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -44,6 +45,12 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=0.985,
         help="Near-duplicate rejection threshold",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=0,
+        help="Progress log cadence in records (0 = auto)",
     )
     return parser.parse_args()
 
@@ -89,6 +96,14 @@ def main() -> int:
     output_path = Path(args.output_path)
 
     raw_records = _load_jsonl(input_path)
+    total = len(raw_records)
+    progress_every = args.progress_every if args.progress_every > 0 else max(1000, total // 100 if total else 1)
+    started_at = time.perf_counter()
+
+    print(
+        f"Starting validation: input_records={total} dedup_threshold={args.dedup_threshold}",
+        flush=True,
+    )
 
     dedup = NearDuplicateIndex(ratio_threshold=args.dedup_threshold)
     output_records: list[dict] = []
@@ -98,12 +113,31 @@ def main() -> int:
     duplicate_rejected = 0
     critic_disagreements = 0
 
-    for raw in raw_records:
+    def _maybe_log_progress(current_index: int) -> None:
+        if current_index % progress_every != 0 and current_index != total:
+            return
+        elapsed = max(time.perf_counter() - started_at, 1e-9)
+        rate = current_index / elapsed
+        remaining = max(total - current_index, 0)
+        eta = remaining / rate if rate > 0 else 0.0
+        percent = (current_index / total) * 100.0 if total else 100.0
+        rejected = schema_rejected + contract_rejected + duplicate_rejected
+        print(
+            "progress(validate): "
+            f"{current_index}/{total} ({percent:.1f}%) "
+            f"kept={len(output_records)} rejected={rejected} "
+            f"critic_disagreements={critic_disagreements} "
+            f"rate={rate:.1f} rec/s eta={eta:.1f}s",
+            flush=True,
+        )
+
+    for idx, raw in enumerate(raw_records, start=1):
         record = deep_copy_record(raw)
 
         shape_errors = validate_record_shape(record)
         if shape_errors:
             schema_rejected += 1
+            _maybe_log_progress(idx)
             continue
 
         user_text = str(record["user_text"]).strip()
@@ -119,11 +153,13 @@ def main() -> int:
         alignment_error = _intent_target_alignment_error(record)
         if alignment_error is not None:
             contract_rejected += 1
+            _maybe_log_progress(idx)
             continue
 
         contract_errors = validate_record_contract(record)
         if contract_errors:
             contract_rejected += 1
+            _maybe_log_progress(idx)
             continue
 
         critic_target = infer_critic_target(user_text=user_text, intent_class=intent_class)
@@ -139,6 +175,7 @@ def main() -> int:
         )
         if not keep:
             duplicate_rejected += 1
+            _maybe_log_progress(idx)
             continue
 
         quality = record.get("quality")
@@ -151,6 +188,7 @@ def main() -> int:
         quality["human_label_ok"] = bool(quality.get("human_label_ok", False))
 
         output_records.append(record)
+        _maybe_log_progress(idx)
 
     write_jsonl(output_path, output_records)
 

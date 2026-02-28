@@ -7,10 +7,13 @@ import os
 import random
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .common import replace_umlauts_ascii
+
+
+DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 
 
 def _local_paraphrase(text: str, *, rng: random.Random) -> str:
@@ -47,18 +50,50 @@ def _local_paraphrase(text: str, *, rng: random.Random) -> str:
     return lowered[0].upper() + lowered[1:] if lowered else text
 
 
+def _extract_paraphrase(content: Any) -> str | None:
+    if not isinstance(content, str):
+        return None
+
+    snippet = content.strip()
+    if not snippet:
+        return None
+
+    if snippet.startswith("```"):
+        snippet = snippet.strip("`\n ")
+        if snippet.lower().startswith("json"):
+            snippet = snippet[4:].strip()
+
+    try:
+        parsed = json.loads(snippet)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+
+    paraphrase = parsed.get("paraphrase")
+    if not isinstance(paraphrase, str):
+        return None
+
+    cleaned = " ".join(paraphrase.strip().split())
+    if len(cleaned) < 3:
+        return None
+    return cleaned
+
+
 @dataclass(slots=True)
 class TeacherClient:
-    """Paraphrase client with optional OpenAI fallback."""
+    """Paraphrase client with OpenAI/Ollama/local providers."""
 
     model: str
     provider: str = "auto"
     timeout_seconds: float = 25.0
+    _ollama_available: bool | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         chosen = self.provider.strip().lower()
-        if chosen not in {"auto", "openai", "local"}:
-            raise ValueError("provider must be one of: auto, openai, local")
+        if chosen not in {"auto", "openai", "ollama", "local"}:
+            raise ValueError("provider must be one of: auto, openai, ollama, local")
         self.provider = chosen
 
     def paraphrase(
@@ -71,10 +106,24 @@ class TeacherClient:
     ) -> tuple[str, bool]:
         provider = self.provider
         if provider == "auto":
-            provider = "openai" if os.getenv("OPENAI_API_KEY", "").strip() else "local"
+            if os.getenv("OPENAI_API_KEY", "").strip():
+                provider = "openai"
+            elif self._is_ollama_ready():
+                provider = "ollama"
+            else:
+                provider = "local"
 
         if provider == "openai":
             paraphrase = self._paraphrase_openai(
+                user_text=user_text,
+                intent_class=intent_class,
+                target_tool_name=target_tool_name,
+            )
+            if paraphrase:
+                return paraphrase, True
+
+        if provider == "ollama":
+            paraphrase = self._paraphrase_ollama(
                 user_text=user_text,
                 intent_class=intent_class,
                 target_tool_name=target_tool_name,
@@ -129,7 +178,13 @@ class TeacherClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            json.JSONDecodeError,
+            OSError,
+        ):
             return None
 
         try:
@@ -137,23 +192,77 @@ class TeacherClient:
         except (KeyError, IndexError, TypeError):
             return None
 
-        if not isinstance(content, str):
-            return None
+        return _extract_paraphrase(content)
 
-        snippet = content.strip()
-        if snippet.startswith("```"):
-            snippet = snippet.strip("`\n ")
-            if snippet.lower().startswith("json"):
-                snippet = snippet[4:].strip()
+    def _paraphrase_ollama(
+        self,
+        *,
+        user_text: str,
+        intent_class: str,
+        target_tool_name: str | None,
+    ) -> str | None:
+        payload = {
+            "model": self.model,
+            "prompt": (
+                "Erzeuge genau eine deutsche Paraphrase der Nutzereingabe. "
+                "Behalte identische Tool-Absicht und Slots. "
+                "Antwort nur als JSON: {\"paraphrase\": string}.\n\n"
+                f"intent_class={intent_class}\n"
+                f"target_tool_name={target_tool_name}\n"
+                f"user_text={user_text}"
+            ),
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.4,
+            },
+        }
+
+        request = urllib.request.Request(
+            url=self._ollama_url("/api/generate"),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
 
         try:
-            parsed = json.loads(snippet)
-        except json.JSONDecodeError:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            json.JSONDecodeError,
+            OSError,
+        ):
+            self._ollama_available = False
             return None
 
-        paraphrase = parsed.get("paraphrase") if isinstance(parsed, dict) else None
-        if not isinstance(paraphrase, str):
-            return None
+        content = body.get("response") if isinstance(body, dict) else None
+        return _extract_paraphrase(content)
 
-        cleaned = " ".join(paraphrase.strip().split())
-        return cleaned or None
+    def _is_ollama_ready(self) -> bool:
+        if self._ollama_available is not None:
+            return self._ollama_available
+
+        request = urllib.request.Request(
+            url=self._ollama_url("/api/tags"),
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=min(self.timeout_seconds, 2.0)):
+                self._ollama_available = True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            self._ollama_available = False
+
+        return self._ollama_available
+
+    @staticmethod
+    def _ollama_url(path: str) -> str:
+        host = os.getenv("OLLAMA_HOST", DEFAULT_OLLAMA_HOST).strip()
+        if not host:
+            host = DEFAULT_OLLAMA_HOST
+        if not host.startswith("http://") and not host.startswith("https://"):
+            host = f"http://{host}"
+        return f"{host.rstrip('/')}{path}"

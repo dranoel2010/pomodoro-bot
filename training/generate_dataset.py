@@ -9,6 +9,7 @@ import json
 import math
 import random
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -41,7 +42,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--teacher-provider",
         default="auto",
-        choices=("auto", "openai", "local"),
+        choices=("auto", "openai", "ollama", "local"),
         help="Teacher paraphrase provider",
     )
     parser.add_argument(
@@ -72,6 +73,12 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=0.55,
         help="Fraction of examples that receive ASR-like noise",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=0,
+        help="Progress log cadence in records (0 = auto)",
     )
     return parser.parse_args()
 
@@ -171,6 +178,7 @@ def main() -> int:
     rng = random.Random(args.seed)
     raw_target_size = int(math.ceil(args.target_size * args.oversample_factor))
     counts = _distribution_for_raw_target(raw_target_size)
+    total_to_generate = sum(counts.values())
 
     teacher = TeacherClient(model=args.teacher, provider=args.teacher_provider)
     created_at = utc_now_iso()
@@ -178,6 +186,14 @@ def main() -> int:
     records: list[dict[str, Any]] = []
     teacher_hits = 0
     noise_hits = 0
+    started_at = time.perf_counter()
+    progress_every = args.progress_every if args.progress_every > 0 else max(1000, total_to_generate // 100)
+
+    print(
+        f"Starting generation: target={args.target_size} raw_target={total_to_generate} "
+        f"teacher_provider={args.teacher_provider} teacher={args.teacher}",
+        flush=True,
+    )
 
     idx = 0
     for intent_class, count in sorted(counts.items()):
@@ -216,6 +232,20 @@ def main() -> int:
             )
             records.append(record)
 
+            if idx % progress_every == 0 or idx == total_to_generate:
+                elapsed = max(time.perf_counter() - started_at, 1e-9)
+                rate = idx / elapsed
+                remaining = max(total_to_generate - idx, 0)
+                eta = remaining / rate if rate > 0 else 0.0
+                percent = (idx / total_to_generate) * 100.0 if total_to_generate else 100.0
+                print(
+                    "progress(generate): "
+                    f"{idx}/{total_to_generate} ({percent:.1f}%) "
+                    f"rate={rate:.1f} rec/s eta={eta:.1f}s "
+                    f"teacher_hits={teacher_hits} noise_hits={noise_hits}",
+                    flush=True,
+                )
+
     rng.shuffle(records)
 
     out_path = Path(args.out)
@@ -244,6 +274,11 @@ def main() -> int:
 
     print(f"Generated {wrote} records -> {out_path}")
     print(f"Report -> {report_path}")
+    if args.teacher_provider == "ollama" and teacher_hits == 0:
+        print(
+            "Warning: teacher_provider=ollama but no successful teacher paraphrases were recorded. "
+            "Check that Ollama is running and the model is available."
+        )
     return 0
 
 
