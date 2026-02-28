@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from llm.types import JSONObject
 from pomodoro import PomodoroSnapshot
 from contracts.ui_protocol import EVENT_POMODORO, EVENT_TIMER
 
@@ -52,7 +53,7 @@ class RuntimeUIPublisher:
         tool_name: str | None = None,
         motivation: str | None = None,
     ) -> None:
-        payload: dict[str, object] = {
+        payload: JSONObject = {
             "action": action,
             "phase": snapshot.phase,
             "session": snapshot.session,
@@ -79,7 +80,7 @@ class RuntimeUIPublisher:
         tool_name: str | None = None,
         message: str | None = None,
     ) -> None:
-        payload: dict[str, object] = {
+        payload: JSONObject = {
             "action": action,
             "phase": snapshot.phase,
             "duration_seconds": snapshot.duration_seconds,

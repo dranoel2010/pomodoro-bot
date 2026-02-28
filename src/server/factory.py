@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 
+from contracts import StartupError
 from contracts.ui_protocol import STATE_IDLE
 
-from .config import UIServerConfig
+from .config import ServerConfigurationError, UIServerConfig
 from .service import UIServer
 
 
@@ -20,7 +21,7 @@ def create_ui_server(*, ui, logger: logging.Logger) -> UIServer | None:
         logger.info("UI server ready at http://%s:%d", ui_server.host, ui_server.port)
         ui_server.publish_state(STATE_IDLE, message="UI server connected")
         return ui_server
-    except Exception as error:
+    except (ServerConfigurationError, OSError, RuntimeError) as error:
         logger.warning(
             "UI server unavailable (%s: %s); continuing startup without it.",
             type(error).__name__,
@@ -28,3 +29,7 @@ def create_ui_server(*, ui, logger: logging.Logger) -> UIServer | None:
         )
         logger.debug("UI server initialization traceback", exc_info=True)
         return None
+    except Exception as error:
+        raise StartupError(
+            f"UI server initialization failed: {type(error).__name__}: {error}"
+        ) from error

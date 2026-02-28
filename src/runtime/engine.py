@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import datetime as dt
 import logging
+from dataclasses import dataclass
 from queue import Empty, Queue
 from typing import Callable
 
@@ -17,7 +18,6 @@ from contracts.ui_protocol import (
     STATE_THINKING,
     STATE_TRANSCRIBING,
 )
-from llm.service import PomodoroAssistantLLM
 from llm.types import EnvironmentContext
 from oracle.service import OracleContextService
 from pomodoro import PomodoroTimer
@@ -33,13 +33,25 @@ from stt.events import (
     WakeWordErrorEvent,
 )
 from stt.service import WakeWordService
-from stt.stt import FasterWhisperSTT
-from tts.service import SpeechService
 
+from .contracts import LLMClient, STTClient, TTSClient
 from .ticks import handle_pomodoro_tick, handle_timer_tick
-from .tool_dispatch import RuntimeToolDispatcher
+from .tools.dispatch import RuntimeToolDispatcher
 from .ui import RuntimeUIPublisher
 from .utterance import process_utterance
+
+
+@dataclass(slots=True)
+class RuntimeComponents:
+    """Container for runtime collaborators built at startup composition time."""
+
+    ui: RuntimeUIPublisher
+    pomodoro_timer: PomodoroTimer
+    countdown_timer: PomodoroTimer
+    dispatcher: RuntimeToolDispatcher
+    event_queue: Queue[object]
+    publisher: QueueEventPublisher
+    utterance_executor: concurrent.futures.ThreadPoolExecutor
 
 
 def _noop_signal_handlers(service: WakeWordService) -> None:
@@ -48,6 +60,44 @@ def _noop_signal_handlers(service: WakeWordService) -> None:
 
 def _wait_for_service_ready(service: WakeWordService, timeout: float) -> bool:
     return service.wait_until_ready(timeout=timeout)
+
+
+def _build_runtime_components(
+    *,
+    logger: logging.Logger,
+    app_config: AppConfig,
+    oracle_service: OracleContextService | None,
+    ui_server: UIServer | None,
+) -> RuntimeComponents:
+    ui = RuntimeUIPublisher(ui_server)
+    pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
+    countdown_timer = PomodoroTimer(
+        duration_seconds=DEFAULT_TIMER_DURATION_SECONDS,
+        logger=logging.getLogger("timer"),
+    )
+    dispatcher = RuntimeToolDispatcher(
+        logger=logger,
+        app_config=app_config,
+        oracle_service=oracle_service,
+        pomodoro_timer=pomodoro_timer,
+        countdown_timer=countdown_timer,
+        ui=ui,
+    )
+    event_queue: Queue[object] = Queue()
+    publisher = QueueEventPublisher(event_queue)
+    utterance_executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="utterance",
+    )
+    return RuntimeComponents(
+        ui=ui,
+        pomodoro_timer=pomodoro_timer,
+        countdown_timer=countdown_timer,
+        dispatcher=dispatcher,
+        event_queue=event_queue,
+        publisher=publisher,
+        utterance_executor=utterance_executor,
+    )
 
 
 class RuntimeEngine:
@@ -59,11 +109,12 @@ class RuntimeEngine:
         logger: logging.Logger,
         app_config: AppConfig,
         wake_word_config: WakeWordConfig,
-        stt: FasterWhisperSTT,
-        assistant_llm: PomodoroAssistantLLM | None = None,
-        speech_service: SpeechService | None = None,
+        stt: STTClient,
+        assistant_llm: LLMClient | None = None,
+        speech_service: TTSClient | None = None,
         oracle_service: OracleContextService | None = None,
         ui_server: UIServer | None = None,
+        components: RuntimeComponents | None = None,
         setup_signal_handlers: Callable[
             [WakeWordService], None
         ] = _noop_signal_handlers,
@@ -86,27 +137,19 @@ class RuntimeEngine:
             "enabled" if self._llm_fast_path_enabled else "disabled",
         )
 
-        self._ui = RuntimeUIPublisher(ui_server)
-        self._pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
-        self._countdown_timer = PomodoroTimer(
-            duration_seconds=DEFAULT_TIMER_DURATION_SECONDS,
-            logger=logging.getLogger("timer"),
-        )
-        self._dispatcher = RuntimeToolDispatcher(
+        runtime_components = components or _build_runtime_components(
             logger=self._logger,
             app_config=app_config,
             oracle_service=oracle_service,
-            pomodoro_timer=self._pomodoro_timer,
-            countdown_timer=self._countdown_timer,
-            ui=self._ui,
+            ui_server=ui_server,
         )
-
-        self._event_queue: Queue[object] = Queue()
-        self._publisher = QueueEventPublisher(self._event_queue)
-        self._utterance_executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="utterance",
-        )
+        self._ui = runtime_components.ui
+        self._pomodoro_timer = runtime_components.pomodoro_timer
+        self._countdown_timer = runtime_components.countdown_timer
+        self._dispatcher = runtime_components.dispatcher
+        self._event_queue = runtime_components.event_queue
+        self._publisher = runtime_components.publisher
+        self._utterance_executor = runtime_components.utterance_executor
         self._pending_utterance: concurrent.futures.Future[None] | None = None
         self._wakeword_service: WakeWordService | None = None
 
@@ -155,14 +198,6 @@ class RuntimeEngine:
         light_level_lux = None
         air_quality = None
         upcoming_events = None
-
-        # disable environment context for now
-        return EnvironmentContext(
-            now_local=now_local,
-            light_level_lux=light_level_lux,
-            air_quality=air_quality,
-            upcoming_events=upcoming_events,
-        )
 
         if self._oracle_service is not None:
             try:

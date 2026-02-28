@@ -1,1 +1,1 @@
-from .factory import create_llm_client
+from .factory import create_llm_config

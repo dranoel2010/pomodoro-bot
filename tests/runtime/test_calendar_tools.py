@@ -6,14 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# Import runtime.calendar_tools without executing src/runtime/__init__.py.
+# Import runtime.tools.calendar without executing src/runtime/__init__.py.
 _RUNTIME_DIR = Path(__file__).resolve().parents[2] / "src" / "runtime"
 if "runtime" not in sys.modules:
     _pkg = types.ModuleType("runtime")
     _pkg.__path__ = [str(_RUNTIME_DIR)]  # type: ignore[attr-defined]
     sys.modules["runtime"] = _pkg
 
-from runtime.calendar_tools import (
+from runtime.tools.calendar import (
     format_calendar_value_natural,
     format_calendar_window_natural,
     handle_calendar_tool_call,
@@ -84,7 +84,7 @@ class CalendarToolsTests(unittest.TestCase):
         self.assertIsNotNone(parsed.tzinfo)
 
     def test_parse_calendar_datetime_accepts_relative_german_format(self) -> None:
-        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+        with patch("runtime.tools.calendar.dt.datetime", _FrozenDateTime):
             parsed = parse_calendar_datetime("heute 10 Uhr")
 
         self.assertIsNotNone(parsed)
@@ -99,7 +99,7 @@ class CalendarToolsTests(unittest.TestCase):
         self.assertEqual(expected, parsed)
 
     def test_parse_calendar_datetime_accepts_relative_dot_time(self) -> None:
-        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+        with patch("runtime.tools.calendar.dt.datetime", _FrozenDateTime):
             parsed = parse_calendar_datetime("heute 0.45 Uhr")
 
         self.assertIsNotNone(parsed)
@@ -122,7 +122,7 @@ class CalendarToolsTests(unittest.TestCase):
         )
         app_config = _AppConfigStub(max_results=3)
 
-        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+        with patch("runtime.tools.calendar.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
                 tool_name="show_upcoming_events",
                 arguments={"time_range": "morgen"},
@@ -147,7 +147,7 @@ class CalendarToolsTests(unittest.TestCase):
         oracle = _OracleStub(event_id="evt-42")
         app_config = _AppConfigStub()
 
-        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+        with patch("runtime.tools.calendar.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
                 tool_name="add_calendar_event",
                 arguments={
@@ -180,7 +180,7 @@ class CalendarToolsTests(unittest.TestCase):
         oracle = _OracleStub(event_id="evt-77")
         app_config = _AppConfigStub()
 
-        with patch("runtime.calendar_tools.dt.datetime", _FrozenDateTime):
+        with patch("runtime.tools.calendar.dt.datetime", _FrozenDateTime):
             message = handle_calendar_tool_call(
                 tool_name="add_calendar_event",
                 arguments={

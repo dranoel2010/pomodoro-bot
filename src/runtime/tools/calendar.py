@@ -7,6 +7,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from llm.types import JSONObject
 from shared.spoken_time import format_spoken_clock
 
 from shared.defaults import (
@@ -203,7 +204,7 @@ def calendar_window_end(time_range: str) -> dt.datetime:
 def handle_calendar_tool_call(
     *,
     tool_name: str,
-    arguments: dict[str, object],
+    arguments: JSONObject,
     oracle_service: "OracleContextService" | None,
     app_config: "AppConfig",
     logger: logging.Logger,

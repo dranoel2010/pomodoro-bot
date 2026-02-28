@@ -5,6 +5,7 @@ Local LLM integration that generates structured assistant replies and normalized
 
 ## Key files
 - `config.py`: validates model/runtime settings and resolves local model paths.
+- `factory.py`: `create_llm_config(...)` for config/resource assembly only.
 - `model_store.py`: downloads and validates GGUF files from Hugging Face.
 - `llama_backend.py`: llama.cpp wrapper with grammar-constrained JSON output.
 - `fast_path.py`: deterministic command routing that can bypass llama.cpp entirely.
@@ -43,7 +44,9 @@ Secrets from environment:
 - `LLM_SYSTEM_PROMPT` (optional fallback prompt path)
 
 ## Integration notes
-- `src/main.py` initializes the module only when `llm.enabled = true`.
+- `runtime.workers.llm.create_llm_worker(...)` owns enabled/disabled gating and process-worker startup.
+- LLM worker CPU-affinity policy is validated in worker-layer config helpers before process creation.
+- Worker-layer payloads and runtime responses use typed contracts (`LLMPayload`, `StructuredResponse`) rather than ad-hoc dictionaries.
 - Runtime tool execution uses canonical tool names from `src/contracts/tool_contract.py`.
 - Parser fallback inference is intentionally enabled when model output is invalid or incomplete.
 - Completion logs include token accounting plus throughput metrics (duration and completion tokens/sec).

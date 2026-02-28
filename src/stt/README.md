@@ -5,6 +5,7 @@ Wake-word detection, utterance capture, and speech-to-text transcription compone
 
 ## Key files
 - `config.py`: `WakeWordConfig` and `STTConfig` models.
+- `factory.py`: `create_stt_resources(...)` for validated wake-word/STT configs only.
 - `service.py`: `WakeWordService` lifecycle and capture loop.
 - `capture.py`: utterance state machine and silence handling.
 - `vad.py`: energy-based VAD.
@@ -22,5 +23,7 @@ Secrets from environment:
 ## Integration notes
 - `WakeWordService` emits events (`WakeWordDetectedEvent`, `UtteranceCapturedEvent`, `WakeWordErrorEvent`).
 - Runtime consumes emitted utterances and forwards them to `FasterWhisperSTT`.
+- Worker process creation lives in `runtime.workers.stt.create_stt_worker(...)`.
+- STT worker runtime state is process-local (no mutable module-level singleton state in worker modules).
 - Adaptive thresholding calibrates against ambient noise on startup.
 - `FasterWhisperSTT` stores downloaded whisper checkpoints in `models/stt` by default.

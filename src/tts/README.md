@@ -5,6 +5,7 @@ Text-to-speech synthesis and playback based on Piper and sounddevice.
 
 ## Key files
 - `config.py`: `TTSConfig` validation.
+- `factory.py`: `create_tts_config(...)` for validated TTS config only.
 - `engine.py`: `PiperTTSEngine` model management and synthesis.
 - `output.py`: `SoundDeviceAudioOutput` playback adapter.
 - `service.py`: `SpeechService` facade.
@@ -22,3 +23,5 @@ From `config.toml` (`[tts]`):
 ## Integration notes
 - Missing local model assets trigger optional Hugging Face download when `hf_repo_id` is set.
 - Runtime uses `SpeechService.speak()` for assistant replies and completion announcements.
+- Worker process creation and enabled/disabled gating live in `runtime.workers.tts.create_tts_worker(...)`.
+- TTS worker requests are explicit typed payloads and runtime state stays process-local.

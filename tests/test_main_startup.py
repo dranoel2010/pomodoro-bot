@@ -11,25 +11,12 @@ if str(_SRC_DIR) not in sys.path:
 
 
 def _import_main_with_startup_stubs():
-    stt_module = types.ModuleType("stt")
-    stt_module.__path__ = []  # type: ignore[attr-defined]
-
-    class _WakeWordService:  # pragma: no cover - type placeholder for import path
-        pass
-
-    stt_module.WakeWordService = _WakeWordService
-    stt_factory_module = types.ModuleType("stt.factory")
-    stt_factory_module.create_stt_client = lambda *args, **kwargs: None
-
-    tts_module = types.ModuleType("tts")
-    tts_module.__path__ = []  # type: ignore[attr-defined]
-    tts_factory_module = types.ModuleType("tts.factory")
-    tts_factory_module.create_tts_client = lambda *args, **kwargs: None
-
-    llm_module = types.ModuleType("llm")
-    llm_module.__path__ = []  # type: ignore[attr-defined]
-    llm_factory_module = types.ModuleType("llm.factory")
-    llm_factory_module.create_llm_client = lambda *args, **kwargs: None
+    runtime_module = types.ModuleType("runtime")
+    runtime_module.__path__ = []  # type: ignore[attr-defined]
+    workers_module = types.ModuleType("runtime.workers")
+    workers_module.create_stt_worker = lambda *args, **kwargs: None
+    workers_module.create_tts_worker = lambda *args, **kwargs: None
+    workers_module.create_llm_worker = lambda *args, **kwargs: None
 
     oracle_module = types.ModuleType("oracle")
     oracle_module.__path__ = []  # type: ignore[attr-defined]
@@ -44,12 +31,8 @@ def _import_main_with_startup_stubs():
     with patch.dict(
         sys.modules,
         {
-            "stt": stt_module,
-            "stt.factory": stt_factory_module,
-            "tts": tts_module,
-            "tts.factory": tts_factory_module,
-            "llm": llm_module,
-            "llm.factory": llm_factory_module,
+            "runtime": runtime_module,
+            "runtime.workers": workers_module,
             "oracle": oracle_module,
             "oracle.factory": oracle_factory_module,
             "server": server_module,

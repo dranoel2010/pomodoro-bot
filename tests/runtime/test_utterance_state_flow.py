@@ -26,6 +26,9 @@ def _build_llm_stub_modules():
         pass
 
     types_module.EnvironmentContext = EnvironmentContext
+    types_module.StructuredResponse = dict
+    types_module.ToolCall = dict
+    types_module.JSONObject = dict
     service_module.PomodoroAssistantLLM = PomodoroAssistantLLM
     package.service = service_module
     package.types = types_module

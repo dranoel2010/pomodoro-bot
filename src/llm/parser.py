@@ -65,11 +65,19 @@ class ResponseParser:
 
         # Intentional behavior: fallback inference keeps the assistant usable
         # even when model output violates the strict JSON contract.
-        inferred = self._infer_tool_call_from_prompt(user_prompt)
+        inferred = self.infer_tool_call_from_prompt(user_prompt)
         return {
-            "assistant_text": self._fallback_assistant_text(inferred),
+            "assistant_text": self.fallback_assistant_text(inferred),
             "tool_call": inferred,
         }
+
+    def infer_tool_call_from_prompt(self, user_prompt: str) -> ToolCall | None:
+        """Public API for deterministic tool-call inference from user text."""
+        return self._infer_tool_call_from_prompt(user_prompt)
+
+    def fallback_assistant_text(self, tool_call: ToolCall | None) -> str:
+        """Public API for generating fallback assistant text."""
+        return self._fallback_assistant_text(tool_call)
 
     def _load_json_object(self, content: str) -> dict[str, Any] | None:
         text = content.strip()
@@ -108,7 +116,7 @@ class ResponseParser:
 
         tool_call = self._normalize_tool_call(obj.get("tool_call"), user_prompt)
         if tool_call is None:
-            tool_call = self._infer_tool_call_from_prompt(user_prompt)
+            tool_call = self.infer_tool_call_from_prompt(user_prompt)
 
         assistant_text = self._normalize_assistant_text(assistant_text, tool_call)
         return {"assistant_text": assistant_text, "tool_call": tool_call}

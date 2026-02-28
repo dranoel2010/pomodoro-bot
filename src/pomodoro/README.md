@@ -14,5 +14,5 @@ Runtime defaults are imported from `src/shared/defaults.py` and `src/pomodoro/co
 
 ## Integration notes
 - Runtime creates one `PomodoroTimer` for pomodoro and one for generic timer mode.
-- Tool dispatch (`src/runtime/tool_dispatch.py`) applies actions and publishes updates.
+- Tool dispatch (`src/runtime/tools/dispatch.py`) applies actions and publishes updates.
 - `poll()` emits one tick per second plus a completion tick.

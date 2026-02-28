@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from llm.types import JSONObject, ToolCall
 from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
 from pomodoro import PomodoroTimer, remap_timer_tool_for_active_pomodoro
 from pomodoro.constants import (
@@ -21,7 +22,7 @@ from contracts.tool_contract import (
     TIMER_TOOL_TO_RUNTIME_ACTION,
 )
 
-from .calendar_tools import handle_calendar_tool_call, parse_duration_seconds
+from .calendar import handle_calendar_tool_call, parse_duration_seconds
 from .messages import (
     ACTIVE_SESSION_PHASES,
     default_pomodoro_text,
@@ -31,7 +32,7 @@ from .messages import (
     timer_rejection_text,
     timer_status_message,
 )
-from .ui import RuntimeUIPublisher
+from ..ui import RuntimeUIPublisher
 
 if TYPE_CHECKING:
     from app_config import AppConfig
@@ -66,16 +67,9 @@ class RuntimeToolDispatcher:
             return timer_status_message(timer_snapshot)
         return "Listening for wake word"
 
-    def handle_tool_call(self, tool_call: dict[str, object], assistant_text: str) -> str:
-        raw_name = tool_call.get("name")
-        if not isinstance(raw_name, str):
-            return assistant_text
-        raw_arguments = tool_call.get("arguments")
-        normalized_arguments = (
-            {key: value for key, value in raw_arguments.items() if isinstance(key, str)}
-            if isinstance(raw_arguments, dict)
-            else {}
-        )
+    def handle_tool_call(self, tool_call: ToolCall, assistant_text: str) -> str:
+        raw_name = tool_call["name"]
+        normalized_arguments: JSONObject = tool_call.get("arguments", {})
 
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
         if pomodoro_snapshot.phase in ACTIVE_SESSION_PHASES:
@@ -103,7 +97,7 @@ class RuntimeToolDispatcher:
     def _handle_pomodoro_tool_call(
         self,
         tool_name: str,
-        arguments: dict[str, object],
+        arguments: JSONObject,
         assistant_text: str,
     ) -> str:
         action = POMODORO_TOOL_TO_RUNTIME_ACTION[tool_name]
@@ -145,7 +139,7 @@ class RuntimeToolDispatcher:
     def _handle_timer_tool_call(
         self,
         tool_name: str,
-        arguments: dict[str, object],
+        arguments: JSONObject,
         assistant_text: str,
     ) -> str:
         action = TIMER_TOOL_TO_RUNTIME_ACTION[tool_name]

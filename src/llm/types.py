@@ -6,17 +6,21 @@ import json
 import datetime as dt
 import re
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypeAlias, TypedDict
 
 from contracts.tool_contract import TOOL_NAME_ORDER
 
 ToolName = Literal[*TOOL_NAME_ORDER]
+JSONScalar: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = "JSONScalar | JSONObject | JSONArray"
+JSONObject: TypeAlias = dict[str, "JSONValue"]
+JSONArray: TypeAlias = list["JSONValue"]
 
 
 class ToolCall(TypedDict):
     """Typed structure for a single normalized runtime tool invocation."""
     name: ToolName
-    arguments: dict[str, Any]
+    arguments: JSONObject
 
 
 class StructuredResponse(TypedDict):
@@ -31,8 +35,8 @@ class EnvironmentContext:
 
     now_local: str
     light_level_lux: float | None = None
-    air_quality: dict[str, Any] | None = None
-    upcoming_events: list[dict[str, Any]] | None = None
+    air_quality: JSONObject | None = None
+    upcoming_events: list[JSONObject] | None = None
 
     def to_prompt_placeholders(self) -> dict[str, str]:
         return {
@@ -158,7 +162,7 @@ class EnvironmentContext:
             return "gestern"
         return f"am {target.day:02d}.{target.month:02d}.{target.year}"
 
-    def _parse_event_datetime(self, value: Any) -> dt.datetime | None:
+    def _parse_event_datetime(self, value: object) -> dt.datetime | None:
         if not isinstance(value, str):
             return None
         raw = value.strip()
@@ -175,12 +179,12 @@ class EnvironmentContext:
         return self._to_reference_timezone(parsed, reference=reference)
 
     @staticmethod
-    def _is_all_day_date_string(value: Any) -> bool:
+    def _is_all_day_date_string(value: object) -> bool:
         if not isinstance(value, str):
             return False
         return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()))
 
-    def _format_event_point(self, value: Any) -> str | None:
+    def _format_event_point(self, value: object) -> str | None:
         parsed = self._parse_event_datetime(value)
         if parsed is None:
             return None
@@ -191,7 +195,7 @@ class EnvironmentContext:
             return f"{day_label}, ganztaegig"
         return f"{day_label} um {parsed.strftime('%H:%M')}"
 
-    def _format_event_window(self, start_value: Any, end_value: Any) -> str | None:
+    def _format_event_window(self, start_value: object, end_value: object) -> str | None:
         start_point = self._format_event_point(start_value)
         if start_point is None:
             return None

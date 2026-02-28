@@ -1,5 +1,5 @@
 """Runtime engine exports."""
 
-from .loop import RuntimeEngine
+from .engine import RuntimeEngine
 
 __all__ = ["RuntimeEngine"]

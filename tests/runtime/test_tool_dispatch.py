@@ -13,7 +13,7 @@ if "runtime" not in sys.modules:
     _pkg.__path__ = [str(_RUNTIME_DIR)]  # type: ignore[attr-defined]
     sys.modules["runtime"] = _pkg
 
-from runtime.tool_dispatch import RuntimeToolDispatcher
+from runtime.tools.dispatch import RuntimeToolDispatcher
 from runtime.ui import RuntimeUIPublisher
 
 

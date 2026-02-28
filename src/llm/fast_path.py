@@ -18,11 +18,11 @@ def maybe_fast_path_response(user_prompt: str) -> StructuredResponse | None:
         return None
 
     parser = ResponseParser()
-    tool_call = parser._infer_tool_call_from_prompt(prompt)
+    tool_call = parser.infer_tool_call_from_prompt(prompt)
     if tool_call is None:
         return None
 
     return {
-        "assistant_text": parser._fallback_assistant_text(tool_call),
+        "assistant_text": parser.fallback_assistant_text(tool_call),
         "tool_call": tool_call,
     }

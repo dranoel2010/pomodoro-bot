@@ -249,14 +249,19 @@ class PomodoroAssistantLLM:
             else None
         )
         self._logger.info(
-            "LLM completion metadata: request_id=%s finish_reason=%s hit_max_tokens=%s max_tokens=%d duration_ms=%d completion_tokens_per_second=%s content_chars=%d system_chars=%d user_chars=%d extra_context_chars=%d total_tokens=%s prompt_tokens=%s completion_tokens_reported=%s completion_tokens_derived=%s accounting_consistent=%s accounting_delta=%s",
+            "LLM completion: request_id=%s finish_reason=%s hit_max_tokens=%s duration_ms=%d content_chars=%d completion_tokens=%s",
             request_id,
             finish_reason,
             hit_max_tokens,
-            effective_max_tokens,
             round(completion_duration_seconds * 1000),
-            completion_tokens_per_second,
             len(content),
+            completion_tokens_derived,
+        )
+        self._logger.debug(
+            "LLM completion metadata: request_id=%s max_tokens=%d completion_tokens_per_second=%s system_chars=%d user_chars=%d extra_context_chars=%d total_tokens=%s prompt_tokens=%s completion_tokens_reported=%s completion_tokens_derived=%s accounting_consistent=%s accounting_delta=%s",
+            request_id,
+            effective_max_tokens,
+            completion_tokens_per_second,
             len(rendered_system_message),
             len(user_prompt_stripped),
             extra_context_chars,
@@ -273,7 +278,7 @@ class PomodoroAssistantLLM:
                 request_id,
                 raw_usage,
             )
-        self._logger.info("LLM completion content: request_id=%s %s", request_id, content)
+        self._logger.debug("LLM completion content: request_id=%s %s", request_id, content)
         # Use a short-lived parser instance per request to avoid cross-request
         # mutable state coupling inside the service lifecycle.
         parser = ResponseParser()

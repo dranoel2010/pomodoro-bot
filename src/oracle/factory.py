@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from contracts import StartupError
+
 from .config import OracleConfig
 from .service import OracleContextService
 
@@ -16,7 +18,7 @@ def create_oracle_service(*, oracle, calendar_id: str | None, service_account_fi
             ),
             logger=logging.getLogger("oracle"),
         )
-    except Exception as error:
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
         logger.warning(
             "Oracle context unavailable (%s: %s); continuing startup without it.",
             type(error).__name__,
@@ -24,3 +26,7 @@ def create_oracle_service(*, oracle, calendar_id: str | None, service_account_fi
         )
         logger.debug("Oracle context initialization traceback", exc_info=True)
         return None
+    except Exception as error:
+        raise StartupError(
+            f"Oracle context initialization failed: {type(error).__name__}: {error}"
+        ) from error

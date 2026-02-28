@@ -1,1 +1,1 @@
-from .factory import create_stt_client
+from .factory import create_stt_resources

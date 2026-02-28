@@ -17,6 +17,7 @@ if "server" not in sys.modules:
     sys.modules["server"] = _pkg
 
 from contracts.ui_protocol import STATE_IDLE
+from contracts import StartupError
 from server.factory import create_ui_server
 
 sys.modules["server"].create_ui_server = create_ui_server
@@ -100,6 +101,23 @@ class ServerFactoryTests(unittest.TestCase):
             "UI server initialization traceback",
             exc_info=True,
         )
+
+    def test_create_ui_server_raises_startup_error_on_unexpected_exception(self) -> None:
+        logger = MagicMock()
+        config = SimpleNamespace(enabled=True, host="127.0.0.1", port=8765)
+
+        with patch(
+            "server.factory.UIServerConfig.from_settings",
+            return_value=config,
+        ), patch(
+            "server.factory.UIServer",
+            side_effect=TypeError("unexpected"),
+        ):
+            with self.assertRaises(StartupError):
+                create_ui_server(
+                    ui=SimpleNamespace(),
+                    logger=logger,
+                )
 
 
 if __name__ == "__main__":

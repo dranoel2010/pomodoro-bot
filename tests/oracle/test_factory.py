@@ -17,6 +17,7 @@ if "oracle" not in sys.modules:
     sys.modules["oracle"] = _pkg
 
 from oracle.factory import create_oracle_service
+from contracts import StartupError
 
 sys.modules["oracle"].create_oracle_service = create_oracle_service
 
@@ -81,6 +82,24 @@ class OracleFactoryTests(unittest.TestCase):
             "Oracle context initialization traceback",
             exc_info=True,
         )
+
+    def test_create_oracle_service_raises_on_unexpected_exception(self) -> None:
+        logger = MagicMock()
+
+        with patch(
+            "oracle.factory.OracleConfig.from_settings",
+            return_value=object(),
+        ), patch(
+            "oracle.factory.OracleContextService",
+            side_effect=TypeError("unexpected"),
+        ):
+            with self.assertRaises(StartupError):
+                create_oracle_service(
+                    oracle=SimpleNamespace(),
+                    calendar_id="calendar-id",
+                    service_account_file="/tmp/service.json",
+                    logger=logger,
+                )
 
 
 if __name__ == "__main__":

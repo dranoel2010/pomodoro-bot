@@ -1,1 +1,1 @@
-from .factory import create_tts_client
+from .factory import create_tts_config

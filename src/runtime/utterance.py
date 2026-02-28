@@ -6,12 +6,10 @@ import logging
 import time
 from typing import Callable
 
-from llm.service import PomodoroAssistantLLM
-from llm.types import EnvironmentContext
+from llm.types import EnvironmentContext, StructuredResponse, ToolCall
 from stt.events import Utterance
-from stt.stt import FasterWhisperSTT, STTError
+from stt.stt import STTError
 from tts.engine import TTSError
-from tts.service import SpeechService
 from contracts.ui_protocol import (
     EVENT_ASSISTANT_REPLY,
     EVENT_ERROR,
@@ -24,6 +22,7 @@ from contracts.ui_protocol import (
 )
 
 from .ui import RuntimeUIPublisher
+from .contracts import LLMClient, STTClient, TTSClient
 
 try:
     from llm.fast_path import maybe_fast_path_response
@@ -34,13 +33,13 @@ except Exception:  # pragma: no cover - optional import in isolated tests
 def process_utterance(
     utterance: Utterance,
     *,
-    stt: FasterWhisperSTT,
-    assistant_llm: PomodoroAssistantLLM | None,
-    speech_service: SpeechService | None,
+    stt: STTClient,
+    assistant_llm: LLMClient | None,
+    speech_service: TTSClient | None,
     logger: logging.Logger,
     ui: RuntimeUIPublisher,
     build_llm_environment_context: Callable[[], EnvironmentContext],
-    handle_tool_call: Callable[[dict[str, object], str], str],
+    handle_tool_call: Callable[[ToolCall, str], str],
     publish_idle_state: Callable[[], None],
     llm_fast_path_enabled: bool = True,
 ) -> None:
@@ -82,7 +81,7 @@ def process_utterance(
             return
 
         ui.publish_state(STATE_THINKING, message="Generating reply")
-        llm_response = None
+        llm_response: StructuredResponse | None = None
         if llm_fast_path_enabled and callable(maybe_fast_path_response):
             fast_path_started_at = time.perf_counter()
             llm_response = maybe_fast_path_response(transcript_text)
@@ -91,7 +90,7 @@ def process_utterance(
                 fast_path_used = True
                 fast_tool_name = None
                 fast_tool_call = llm_response.get("tool_call")
-                if isinstance(fast_tool_call, dict):
+                if fast_tool_call is not None:
                     fast_tool_name = fast_tool_call.get("name")
                 logger.info(
                     "LLM fast-path hit: duration_ms=%d tool=%s",
@@ -107,7 +106,7 @@ def process_utterance(
 
         assistant_text = llm_response["assistant_text"].strip()
         tool_call = llm_response.get("tool_call")
-        if isinstance(tool_call, dict):
+        if tool_call is not None:
             assistant_text = handle_tool_call(tool_call, assistant_text).strip()
 
         if assistant_text:

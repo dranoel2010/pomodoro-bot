@@ -19,16 +19,13 @@ from app_config import (
     resolve_config_path,
 )
 from contracts import StartupError
-from llm.factory import create_llm_client
 from oracle.factory import create_oracle_service
 from server.factory import create_ui_server
-from stt.factory import create_stt_client
-from tts.factory import create_tts_client
 
 if TYPE_CHECKING:
     from stt.service import WakeWordService
 
-type LogQueue = MPQueue[object]
+LogQueue = MPQueue
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
@@ -104,6 +101,30 @@ def _load_runtime_engine():
     return RuntimeEngine
 
 
+def _load_worker_factories():
+    try:
+        from runtime.workers import (
+            create_llm_worker,
+            create_stt_worker,
+            create_tts_worker,
+        )
+    except ImportError as error:
+        raise StartupError(f"Runtime worker import error: {error}")
+    return create_stt_worker, create_llm_worker, create_tts_worker
+
+
+def _safe_close(resource: object | None, *, label: str, logger: logging.Logger) -> None:
+    if resource is None:
+        return
+    close_method = getattr(resource, "close", None)
+    if not callable(close_method):
+        return
+    try:
+        close_method()
+    except Exception as error:
+        logger.error("Failed to close %s: %s", label, error)
+
+
 def main() -> int:
     logger = setup_logging(level=logging.INFO)
     stt_client = None
@@ -115,16 +136,21 @@ def main() -> int:
         log_queue, log_listener = _start_log_listener()
         app_config, secret_config = _load_runtime_config(logger)
         log_level = logging.getLogger().getEffectiveLevel()
+        create_stt_worker, create_llm_worker, create_tts_worker = _load_worker_factories()
 
-        wake_word_config, stt_client = create_stt_client(
+        wake_word_config, stt_client = create_stt_worker(
             wake_word=app_config.wake_word,
             stt=app_config.stt,
             pico_key=secret_config.pico_voice_access_key,
             log_queue=log_queue,
             log_level=log_level,
         )
-        speech_service = create_tts_client(tts=app_config.tts, log_queue=log_queue, log_level=log_level)
-        assistant_llm = create_llm_client(
+        speech_service = create_tts_worker(
+            tts=app_config.tts,
+            log_queue=log_queue,
+            log_level=log_level,
+        )
+        assistant_llm = create_llm_worker(
             llm=app_config.llm,
             hf_token=secret_config.hf_token,
             log_queue=log_queue,
@@ -166,21 +192,9 @@ def main() -> int:
         logger.exception("Unhandled startup failure")
         return 1
     finally:
-        if assistant_llm is not None:
-            try:
-                assistant_llm.close()
-            except Exception as error:
-                logger.error("Failed to close LLM process client: %s", error)
-        if speech_service is not None:
-            try:
-                speech_service.close()
-            except Exception as error:
-                logger.error("Failed to close TTS process client: %s", error)
-        if stt_client is not None:
-            try:
-                stt_client.close()
-            except Exception as error:
-                logger.error("Failed to close STT process client: %s", error)
+        _safe_close(assistant_llm, label="LLM process client", logger=logger)
+        _safe_close(speech_service, label="TTS process client", logger=logger)
+        _safe_close(stt_client, label="STT process client", logger=logger)
         if log_listener is not None:
             log_listener.stop()
 
