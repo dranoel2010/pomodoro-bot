@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pomodoro-bot.local/training/schema_v1.json",
+  "title": "ToolCallTrainingRecordV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "split",
+    "user_text",
+    "target",
+    "intent_class",
+    "noise_tags",
+    "source",
+    "quality",
+    "provenance"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "split": {
+      "type": "string",
+      "enum": ["train", "val", "test"]
+    },
+    "user_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assistant_text", "tool_call"],
+      "properties": {
+        "assistant_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_call": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "arguments"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "arguments": {"type": "object"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "intent_class": {
+      "type": "string",
+      "minLength": 1
+    },
+    "noise_tags": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "source": {
+      "type": "string",
+      "enum": ["template", "teacher", "mutation", "hard_negative"]
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validator_pass", "critic_pass", "human_reviewed", "human_label_ok"],
+      "properties": {
+        "validator_pass": {"type": "boolean"},
+        "critic_pass": {"type": "boolean"},
+        "human_reviewed": {"type": "boolean"},
+        "human_label_ok": {"type": "boolean"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_id", "generator_model", "created_at"],
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1},
+        "generator_model": {"type": "string", "minLength": 1},
+        "created_at": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
