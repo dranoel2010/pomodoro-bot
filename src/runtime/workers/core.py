@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from logging.handlers import QueueHandler
 from typing import Callable, Protocol
 
+from contracts.ipc import _RequestEnvelope, _ResponseEnvelope
+
 
 class WorkerError(RuntimeError):
     """Base class for process worker lifecycle errors."""
@@ -39,21 +41,6 @@ class _WorkerRuntime(Protocol):
 
 
 WorkerRuntimeFactory = Callable[..., _WorkerRuntime]
-
-
-@dataclass(frozen=True, slots=True)
-class _RequestEnvelope:
-    call_id: int
-    payload: object
-
-
-@dataclass(frozen=True, slots=True)
-class _ResponseEnvelope:
-    kind: str
-    call_id: int | None = None
-    payload: object | None = None
-    error_type: str | None = None
-    error_message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

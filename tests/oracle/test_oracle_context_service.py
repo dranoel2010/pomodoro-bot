@@ -13,8 +13,8 @@ if "oracle" not in sys.modules:
     sys.modules["oracle"] = _pkg
 
 from oracle.config import OracleConfig
-from oracle.contracts import OracleProviders
 from oracle.service import OracleContextService
+from contracts.oracle import OracleProviders
 
 
 class _Clock:

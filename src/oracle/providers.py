@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
+from contracts.oracle import OracleProviders
+
 from .calendar import GoogleCalendar
 from .config import OracleConfig
-from .contracts import OracleProviders
 from .sensor import ENS160Sensor, TEMT6000Sensor
 
 

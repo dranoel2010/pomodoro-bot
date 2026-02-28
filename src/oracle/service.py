@@ -7,8 +7,9 @@ import time
 from datetime import datetime
 from typing import Callable
 
+from contracts.oracle import OracleProviders
+
 from .config import OracleConfig
-from .contracts import OracleProviders
 from .providers import build_oracle_providers
 
 

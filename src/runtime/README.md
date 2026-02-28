@@ -5,7 +5,7 @@ Application orchestration loop that connects wake-word events, STT/LLM/TTS proce
 
 ## Key files
 - `engine.py`: `RuntimeEngine` lifecycle and event loop.
-- `contracts.py`: protocol interfaces used by runtime orchestration (`STTClient`, `LLMClient`, `TTSClient`).
+- Protocol interfaces (`STTClient`, `LLMClient`, `TTSClient`) live in `src/contracts/pipeline.py` — not in this package.
 - `utterance.py`: STT -> LLM -> tool-call -> TTS utterance processing.
 - `ticks.py`: completion/tick handling for timers.
 - `ui.py`: UI publishing facade.

@@ -22,7 +22,7 @@ from contracts.ui_protocol import (
 )
 
 from .ui import RuntimeUIPublisher
-from .contracts import LLMClient, STTClient, TTSClient
+from contracts.pipeline import LLMClient, STTClient, TTSClient
 
 try:
     from llm.fast_path import maybe_fast_path_response

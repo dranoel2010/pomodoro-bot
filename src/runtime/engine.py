@@ -34,7 +34,7 @@ from stt.events import (
 )
 from stt.service import WakeWordService
 
-from .contracts import LLMClient, STTClient, TTSClient
+from contracts.pipeline import LLMClient, STTClient, TTSClient
 from .ticks import handle_pomodoro_tick, handle_timer_tick
 from .tools.dispatch import RuntimeToolDispatcher
 from .ui import RuntimeUIPublisher

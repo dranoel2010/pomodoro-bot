@@ -12,10 +12,9 @@ from pomodoro.constants import (
     REASON_COMPLETED,
     REASON_TICK,
 )
+from contracts.pipeline import TTSClient
 from contracts.ui_protocol import EVENT_ASSISTANT_REPLY, STATE_REPLYING
 from tts.engine import TTSError
-
-from .contracts import TTSClient
 from .tools.messages import default_pomodoro_text, default_timer_text
 from .ui import RuntimeUIPublisher
 

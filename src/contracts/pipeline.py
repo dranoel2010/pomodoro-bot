@@ -1,6 +1,6 @@
-"""Runtime-facing protocol contracts for worker/service dependencies."""
-
 from __future__ import annotations
+
+"""Pipeline-facing Protocol contracts for STT, LLM, and TTS worker dependencies."""
 
 from typing import TYPE_CHECKING, Protocol
 
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class STTClient(Protocol):
-    def transcribe(self, utterance: "Utterance") -> "TranscriptionResult":
+    def transcribe(self, utterance: Utterance) -> TranscriptionResult:
         ...
 
 
@@ -20,10 +20,10 @@ class LLMClient(Protocol):
         self,
         user_prompt: str,
         *,
-        env: "EnvironmentContext" | None = None,
+        env: EnvironmentContext | None = None,
         extra_context: str | None = None,
         max_tokens: int | None = None,
-    ) -> "StructuredResponse":
+    ) -> StructuredResponse:
         ...
 
 
