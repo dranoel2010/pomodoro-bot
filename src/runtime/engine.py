@@ -5,8 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import datetime as dt
 import logging
-from dataclasses import dataclass
-from queue import Empty, Queue
+from queue import Empty
 from typing import Callable
 
 from app_config import AppConfig
@@ -20,13 +19,10 @@ from contracts.ui_protocol import (
 )
 from llm.types import EnvironmentContext
 from oracle.service import OracleContextService
-from pomodoro import PomodoroCycleState, PomodoroTimer
 from pomodoro.constants import ACTION_SYNC, REASON_STARTUP
 from server.service import UIServer
-from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS
 from stt.config import WakeWordConfig
 from stt.events import (
-    QueueEventPublisher,
     Utterance,
     UtteranceCapturedEvent,
     WakeWordDetectedEvent,
@@ -35,24 +31,9 @@ from stt.events import (
 from stt.service import WakeWordService
 
 from contracts.pipeline import LLMClient, STTClient, TTSClient
+from .components import RuntimeComponents, _build_runtime_components
 from .ticks import handle_pomodoro_tick, handle_timer_tick
-from .tools.dispatch import RuntimeToolDispatcher
-from .ui import RuntimeUIPublisher
 from .utterance import process_utterance
-
-
-@dataclass(slots=True)
-class RuntimeComponents:
-    """Container for runtime collaborators built at startup composition time."""
-
-    ui: RuntimeUIPublisher
-    pomodoro_timer: PomodoroTimer
-    countdown_timer: PomodoroTimer
-    dispatcher: RuntimeToolDispatcher
-    event_queue: Queue[object]
-    publisher: QueueEventPublisher
-    utterance_executor: concurrent.futures.ThreadPoolExecutor
-    pomodoro_cycle: PomodoroCycleState | None = None
 
 
 def _noop_signal_handlers(service: WakeWordService) -> None:
@@ -61,47 +42,6 @@ def _noop_signal_handlers(service: WakeWordService) -> None:
 
 def _wait_for_service_ready(service: WakeWordService, timeout: float) -> bool:
     return service.wait_until_ready(timeout=timeout)
-
-
-def _build_runtime_components(
-    *,
-    logger: logging.Logger,
-    app_config: AppConfig,
-    oracle_service: OracleContextService | None,
-    ui_server: UIServer | None,
-) -> RuntimeComponents:
-    ui = RuntimeUIPublisher(ui_server)
-    pomodoro_timer = PomodoroTimer(logger=logging.getLogger("pomodoro"))
-    countdown_timer = PomodoroTimer(
-        duration_seconds=DEFAULT_TIMER_DURATION_SECONDS,
-        logger=logging.getLogger("timer"),
-    )
-    pomodoro_cycle = PomodoroCycleState()
-    dispatcher = RuntimeToolDispatcher(
-        logger=logger,
-        app_config=app_config,
-        oracle_service=oracle_service,
-        pomodoro_timer=pomodoro_timer,
-        countdown_timer=countdown_timer,
-        ui=ui,
-        pomodoro_cycle=pomodoro_cycle,
-    )
-    event_queue: Queue[object] = Queue()
-    publisher = QueueEventPublisher(event_queue)
-    utterance_executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=1,
-        thread_name_prefix="utterance",
-    )
-    return RuntimeComponents(
-        ui=ui,
-        pomodoro_timer=pomodoro_timer,
-        countdown_timer=countdown_timer,
-        dispatcher=dispatcher,
-        event_queue=event_queue,
-        publisher=publisher,
-        utterance_executor=utterance_executor,
-        pomodoro_cycle=pomodoro_cycle,
-    )
 
 
 class RuntimeEngine:

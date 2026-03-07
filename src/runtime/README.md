@@ -16,7 +16,8 @@ Application orchestration loop that connects wake-word events, STT/LLM/TTS proce
 - `workers/llm.py`: LLM process worker, affinity shaping, and `create_llm_worker(...)` startup factory.
 - `workers/tts.py`: TTS process worker plus `create_tts_worker(...)` startup factory.
 - `workers/core.py`: shared process worker lifecycle/restart primitives.
-- `engine.py` also exposes `RuntimeComponents` + composition helpers to keep dependency wiring separate from orchestration logic.
+- `components.py`: `RuntimeComponents` dataclass and startup composition helpers.
+- `engine.py` imports and re-exposes the composition symbols for backward compatibility.
 
 ## Configuration
 Consumes the already-parsed `AppConfig` passed in by `src/main.py`.
