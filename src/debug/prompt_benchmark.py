@@ -20,7 +20,7 @@ _SRC_ROOT = Path(__file__).resolve().parents[1]
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from app_config import AppConfigurationError, load_app_config, resolve_config_path
+from config import AppConfigurationError, load_app_config, resolve_config_path
 from contracts.tool_contract import TOOL_NAMES
 from llm.config import ConfigurationError, LLMConfig
 from llm.model_store import HFModelSpec, ModelDownloadError, ensure_model_downloaded

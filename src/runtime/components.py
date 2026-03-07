@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from queue import Queue
 
-from app_config import AppConfig
+from config import AppConfig
 from oracle.service import OracleContextService
 from pomodoro import PomodoroCycleState, PomodoroTimer
 from server.service import UIServer

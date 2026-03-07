@@ -10,7 +10,7 @@ from llm.types import JSONObject
 from .calendar import handle_calendar_tool_call
 
 if TYPE_CHECKING:
-    from app_config import AppConfig
+    from config import AppConfig
     from oracle.service import OracleContextService
 
 

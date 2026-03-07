@@ -8,7 +8,7 @@ import logging
 from queue import Empty
 from typing import Callable
 
-from app_config import AppConfig
+from config import AppConfig
 from contracts.ui_protocol import (
     EVENT_ERROR,
     STATE_ERROR,

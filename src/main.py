@@ -10,7 +10,7 @@ from multiprocessing.queues import Queue as MPQueue
 from types import FrameType
 from typing import TYPE_CHECKING
 
-from app_config import (
+from config import (
     AppConfig,
     AppConfigurationError,
     SecretConfig,

@@ -9,7 +9,7 @@ from pathlib import Path
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app_config import AppConfigurationError, load_app_config, resolve_config_path
+from config import AppConfigurationError, load_app_config, resolve_config_path
 from server.config import ServerConfigurationError, UIServerConfig
 from server.service import UIServer
 

@@ -4,7 +4,7 @@ import types
 import unittest
 from pathlib import Path
 
-from app_config_schema import UIServerSettings
+from config import UIServerSettings
 
 # Import server.config without executing src/server/__init__.py.
 _SERVER_DIR = Path(__file__).resolve().parents[2] / "src" / "server"

@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 
-from app_config_schema import (
+from .schema import (
     AppConfig,
     AppConfigurationError,
     LLMSettings,

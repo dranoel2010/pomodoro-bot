@@ -10,7 +10,7 @@ import time
 import pvporcupine
 from pvrecorder import PvRecorder
 
-from app_config import AppConfigurationError, load_app_config, load_secret_config, resolve_config_path
+from config import AppConfigurationError, load_app_config, load_secret_config, resolve_config_path
 from stt.config import ConfigurationError, WakeWordConfig
 
 

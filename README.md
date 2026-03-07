@@ -15,7 +15,7 @@ Current runtime pipeline:
 ## Project layout
 
 - `src/main.py`: app entrypoint and dependency bootstrap.
-- `src/app_config.py`, `src/app_config_parser.py`, `src/app_config_schema.py`: runtime config loading and validation.
+- `src/config/`: runtime config loading and validation (`schema.py`, `parser.py`, `loader.py`).
 - `src/runtime/`: main orchestration loop (events, utterance pipeline, tool dispatch). See `src/runtime/README.md`.
 - `src/stt/`: wake-word capture + transcription foundation. See `src/stt/README.md`.
 - `src/llm/`: local LLM config/download/backend/parser/service. See `src/llm/README.md`.

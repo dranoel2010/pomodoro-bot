@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app_config import (
+from config import (
     AppConfigurationError,
     load_app_config,
     load_secret_config,
@@ -290,7 +290,7 @@ class AppConfigLoadingTests(unittest.TestCase):
             executable = Path(exe_dir) / "main"
 
             with patch.dict(os.environ, {}, clear=True):
-                with patch("app_config.Path.cwd", return_value=cwd):
+                with patch("config.loader.Path.cwd", return_value=cwd):
                     with patch.object(sys, "frozen", True, create=True):
                         with patch.object(sys, "executable", str(executable), create=True):
                             resolved = resolve_config_path()

@@ -10,9 +10,10 @@ pomodoro-bot/                       # Project root (monolith)
 │
 ├── src/                            # [SOURCE ROOT] All Python packages
 │   ├── main.py                     # [ENTRY POINT] App startup + composition root
-│   ├── app_config.py               # Config loader (TOML + env vars, PyInstaller-aware)
-│   ├── app_config_parser.py        # TOML section parsing + validation
-│   ├── app_config_schema.py        # Config dataclass schema definitions
+│   ├── config/                     # Runtime config package
+│   │   ├── loader.py               # Config loader (TOML + env vars, PyInstaller-aware)
+│   │   ├── parser.py               # TOML section parsing + validation
+│   │   └── schema.py               # Config dataclass schema definitions
 │   │
 │   ├── contracts/                  # Shared protocol constants
 │   │   ├── tool_contract.py        # [KEY] TOOL_NAME_ORDER — single source of truth for all tool names

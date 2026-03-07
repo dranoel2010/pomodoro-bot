@@ -17,7 +17,7 @@ from shared.defaults import (
 from contracts.tool_contract import TOOL_ADD_CALENDAR_EVENT, TOOL_SHOW_UPCOMING_EVENTS
 
 if TYPE_CHECKING:
-    from app_config import AppConfig
+    from config import AppConfig
     from oracle.service import OracleContextService
 
 

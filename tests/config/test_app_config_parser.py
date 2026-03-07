@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app_config import AppConfigurationError, load_app_config
-from app_config_parser import parse_app_config
+from config import AppConfigurationError, load_app_config
+from config import parse_app_config
 
 
 def _minimal_toml_bytes() -> bytes:

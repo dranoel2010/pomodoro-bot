@@ -15,8 +15,8 @@ from shared.env_keys import (
     ENV_PICO_VOICE_ACCESS_KEY,
 )
 
-from app_config_parser import parse_app_config
-from app_config_schema import (
+from .parser import parse_app_config
+from .schema import (
     AppConfig,
     AppConfigurationError,
     DEFAULT_CONFIG_FILE,
