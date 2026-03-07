@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pomodoro.constants import (
     ACTION_ABORT,
     ACTION_CONTINUE,
@@ -24,6 +26,8 @@ TOOL_STOP_POMODORO = "stop_pomodoro_session"
 TOOL_PAUSE_POMODORO = "pause_pomodoro_session"
 TOOL_CONTINUE_POMODORO = "continue_pomodoro_session"
 TOOL_RESET_POMODORO = "reset_pomodoro_session"
+TOOL_STATUS_POMODORO = "status_pomodoro_session"
+TOOL_TELL_JOKE = "tell_joke"
 
 TOOL_SHOW_UPCOMING_EVENTS = "show_upcoming_events"
 TOOL_ADD_CALENDAR_EVENT = "add_calendar_event"
@@ -40,11 +44,16 @@ TOOL_NAME_ORDER: tuple[str, ...] = (
     TOOL_PAUSE_POMODORO,
     TOOL_CONTINUE_POMODORO,
     TOOL_RESET_POMODORO,
+    TOOL_STATUS_POMODORO,
+    TOOL_TELL_JOKE,
     TOOL_SHOW_UPCOMING_EVENTS,
     TOOL_ADD_CALENDAR_EVENT,
 )
 
 TOOL_NAMES: frozenset[str] = frozenset(TOOL_NAME_ORDER)
+
+# Canonical ToolName Literal — derived from TOOL_NAME_ORDER for consistency
+ToolName = Literal[*TOOL_NAME_ORDER]
 
 TIMER_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -63,6 +72,7 @@ POMODORO_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_PAUSE_POMODORO,
         TOOL_CONTINUE_POMODORO,
         TOOL_RESET_POMODORO,
+        TOOL_STATUS_POMODORO,
     }
 )
 
@@ -76,6 +86,14 @@ TOOLS_WITHOUT_ARGUMENTS: frozenset[str] = frozenset(
         TOOL_PAUSE_POMODORO,
         TOOL_CONTINUE_POMODORO,
         TOOL_RESET_POMODORO,
+        TOOL_STATUS_POMODORO,
+        TOOL_TELL_JOKE,
+    }
+)
+
+PURE_LLM_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        TOOL_TELL_JOKE,
     }
 )
 

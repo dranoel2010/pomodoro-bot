@@ -1,5 +1,7 @@
 """High-level LLM service that renders prompts and parses model output."""
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
@@ -25,6 +27,7 @@ class PomodoroAssistantLLM:
         self._config = config
         self._backend = LlamaBackend(config)
         self._system_prompt_template = self._build_system_message()
+        self._last_tokens: int = 0
 
     @classmethod
     def from_model_path(
@@ -45,7 +48,7 @@ class PomodoroAssistantLLM:
         use_mmap: bool | None = None,
         use_mlock: bool | None = None,
         verbose: bool | None = None,
-    ) -> "PomodoroAssistantLLM":
+    ) -> PomodoroAssistantLLM:
         config_kwargs: dict[str, object] = {"model_path": model_path}
         if max_tokens is not None:
             config_kwargs["max_tokens"] = max_tokens
@@ -194,34 +197,7 @@ class PomodoroAssistantLLM:
         completion_started_at = time.perf_counter()
         content = self._backend.complete(messages, max_tokens=effective_max_tokens)
         completion_duration_seconds = time.perf_counter() - completion_started_at
-        usage = getattr(self._backend, "last_usage", None)
-        finish_reason = getattr(self._backend, "last_finish_reason", None)
-        prompt_tokens = getattr(self._backend, "last_prompt_tokens", None)
-        completion_tokens_reported = getattr(self._backend, "last_completion_tokens", None)
-        total_tokens = getattr(self._backend, "last_total_tokens", None)
-        completion_tokens_derived = (
-            total_tokens - prompt_tokens
-            if isinstance(total_tokens, int) and isinstance(prompt_tokens, int)
-            else None
-        )
-        accounting_consistent = (
-            total_tokens == (prompt_tokens + completion_tokens_reported)
-            if all(
-                isinstance(value, int)
-                for value in (total_tokens, prompt_tokens, completion_tokens_reported)
-            )
-            else None
-        )
-        accounting_delta = (
-            total_tokens - (prompt_tokens + completion_tokens_reported)
-            if all(
-                isinstance(value, int)
-                for value in (total_tokens, prompt_tokens, completion_tokens_reported)
-            )
-            else None
-        )
-        raw_usage = None
-
+        usage = self._backend.last_usage
         if usage is not None:
             finish_reason = usage.finish_reason
             prompt_tokens = usage.prompt_tokens
@@ -231,6 +207,33 @@ class PomodoroAssistantLLM:
             accounting_consistent = usage.accounting_consistent
             accounting_delta = usage.accounting_delta
             raw_usage = usage.raw_usage
+        else:
+            finish_reason = self._backend.last_finish_reason
+            prompt_tokens = self._backend.last_prompt_tokens
+            completion_tokens_reported = self._backend.last_completion_tokens
+            total_tokens = self._backend.last_total_tokens
+            completion_tokens_derived = (
+                total_tokens - prompt_tokens
+                if isinstance(total_tokens, int) and isinstance(prompt_tokens, int)
+                else None
+            )
+            accounting_consistent = (
+                total_tokens == (prompt_tokens + completion_tokens_reported)
+                if all(
+                    isinstance(value, int)
+                    for value in (total_tokens, prompt_tokens, completion_tokens_reported)
+                )
+                else None
+            )
+            accounting_delta = (
+                total_tokens - (prompt_tokens + completion_tokens_reported)
+                if all(
+                    isinstance(value, int)
+                    for value in (total_tokens, prompt_tokens, completion_tokens_reported)
+                )
+                else None
+            )
+            raw_usage = None
 
         hit_max_tokens = (
             finish_reason == "length"
@@ -248,6 +251,7 @@ class PomodoroAssistantLLM:
             )
             else None
         )
+        self._last_tokens = completion_tokens_derived if isinstance(completion_tokens_derived, int) else 0
         self._logger.info(
             "LLM completion: request_id=%s finish_reason=%s hit_max_tokens=%s duration_ms=%d content_chars=%d completion_tokens=%s",
             request_id,
@@ -283,6 +287,10 @@ class PomodoroAssistantLLM:
         # mutable state coupling inside the service lifecycle.
         parser = ResponseParser()
         return parser.parse(content, user_prompt_stripped)
+
+    @property
+    def last_tokens(self) -> int:
+        return self._last_tokens
 
     def _render_system_message(self, env: EnvironmentContext | None) -> str:
         content = self._system_prompt_template

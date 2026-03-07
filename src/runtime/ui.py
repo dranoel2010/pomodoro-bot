@@ -52,6 +52,8 @@ class RuntimeUIPublisher:
         reason: str = "",
         tool_name: str | None = None,
         motivation: str | None = None,
+        cycle_phase: str | None = None,
+        session_count: int | None = None,
     ) -> None:
         payload: JSONObject = {
             "action": action,
@@ -68,6 +70,10 @@ class RuntimeUIPublisher:
             payload["tool_name"] = tool_name
         if motivation:
             payload["motivation"] = motivation
+        if cycle_phase is not None:
+            payload["cycle_phase"] = cycle_phase
+        if session_count is not None:
+            payload["session_count"] = session_count
         self.publish(EVENT_POMODORO, **payload)
 
     def publish_timer_update(

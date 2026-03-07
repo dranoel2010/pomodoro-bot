@@ -5,6 +5,10 @@ venv
 thorsten_vits/
 models/*
 !models/.gitkeep
-dist
+dist/*
+!dist/pomodoro-bot.service
 main.spec
+build/*
 build
+!build/benchmark_results.json
+!build/pi5_gate_evidence.txt

@@ -1,0 +1,15 @@
+[Unit]
+Description=Pomodoro Bot Voice Assistant
+After=sound.target network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pomodoro-bot
+EnvironmentFile=/home/pi/pomodoro-bot/.env
+ExecStart=/home/pi/pomodoro-bot/main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

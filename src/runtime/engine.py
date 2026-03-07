@@ -20,7 +20,7 @@ from contracts.ui_protocol import (
 )
 from llm.types import EnvironmentContext
 from oracle.service import OracleContextService
-from pomodoro import PomodoroTimer
+from pomodoro import PomodoroCycleState, PomodoroTimer
 from pomodoro.constants import ACTION_SYNC, REASON_STARTUP
 from server.service import UIServer
 from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS
@@ -52,6 +52,7 @@ class RuntimeComponents:
     event_queue: Queue[object]
     publisher: QueueEventPublisher
     utterance_executor: concurrent.futures.ThreadPoolExecutor
+    pomodoro_cycle: PomodoroCycleState | None = None
 
 
 def _noop_signal_handlers(service: WakeWordService) -> None:
@@ -75,6 +76,7 @@ def _build_runtime_components(
         duration_seconds=DEFAULT_TIMER_DURATION_SECONDS,
         logger=logging.getLogger("timer"),
     )
+    pomodoro_cycle = PomodoroCycleState()
     dispatcher = RuntimeToolDispatcher(
         logger=logger,
         app_config=app_config,
@@ -82,6 +84,7 @@ def _build_runtime_components(
         pomodoro_timer=pomodoro_timer,
         countdown_timer=countdown_timer,
         ui=ui,
+        pomodoro_cycle=pomodoro_cycle,
     )
     event_queue: Queue[object] = Queue()
     publisher = QueueEventPublisher(event_queue)
@@ -97,6 +100,7 @@ def _build_runtime_components(
         event_queue=event_queue,
         publisher=publisher,
         utterance_executor=utterance_executor,
+        pomodoro_cycle=pomodoro_cycle,
     )
 
 
@@ -150,6 +154,7 @@ class RuntimeEngine:
         self._event_queue = runtime_components.event_queue
         self._publisher = runtime_components.publisher
         self._utterance_executor = runtime_components.utterance_executor
+        self._pomodoro_cycle = runtime_components.pomodoro_cycle
         self._pending_utterance: concurrent.futures.Future[None] | None = None
         self._wakeword_service: WakeWordService | None = None
 
@@ -287,6 +292,8 @@ class RuntimeEngine:
                 logger=self._logger,
                 ui=self._ui,
                 publish_idle_state=self._publish_idle_state,
+                pomodoro_timer=self._pomodoro_timer,
+                cycle=self._pomodoro_cycle,
             )
 
         timer_tick = self._countdown_timer.poll()

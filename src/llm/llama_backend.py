@@ -1,5 +1,7 @@
 """llama.cpp backend wrapper with constrained JSON grammar output."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
 

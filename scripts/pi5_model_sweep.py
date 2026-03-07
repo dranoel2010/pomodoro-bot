@@ -13,6 +13,14 @@ from typing import Any
 
 from llama_cpp import Llama
 
+_PI5_EPILOG = """
+Pi 5 deployment notes:
+  - Run ./scripts/pi5_cpu_tuning.sh apply before benchmarking on Pi 5 to ensure
+    consistent throughput without CPU frequency-scaling interference.
+  - Mac execution does not require the tuning script.
+  - Performance gate thresholds (>=10 tok/s, <=25000 ms e2e) are verified in Story 2.4.
+"""
+
 
 DEFAULT_PROMPT = "Starte einen Pomodoro fuer 25 Minuten zum Thema Code Review."
 
@@ -41,7 +49,7 @@ class BenchmarkResult:
     median_duration_seconds: float
     median_tokens_per_second: float
     median_completion_tokens: int
-    finish_reasons: dict[str, int]
+    finish_reasons: tuple[tuple[str, int], ...]
 
 
 def _parse_csv_ints(raw: str) -> list[int]:
@@ -179,10 +187,10 @@ def _benchmark_case(
         )
         samples.append(sample)
 
-    finish_reasons: dict[str, int] = {}
+    finish_reasons_dict: dict[str, int] = {}
     for sample in samples:
         label = sample.finish_reason or "unknown"
-        finish_reasons[label] = finish_reasons.get(label, 0) + 1
+        finish_reasons_dict[label] = finish_reasons_dict.get(label, 0) + 1
 
     durations = [sample.duration_seconds for sample in samples]
     completion_tokens = [sample.completion_tokens or 0 for sample in samples]
@@ -206,8 +214,39 @@ def _benchmark_case(
         median_duration_seconds=statistics.median(durations),
         median_tokens_per_second=median_tokens_per_second,
         median_completion_tokens=int(statistics.median(completion_tokens)),
-        finish_reasons=finish_reasons,
+        finish_reasons=tuple(sorted(finish_reasons_dict.items())),
     )
+
+
+def _extract_variant(model_path: str) -> str:
+    """Extract variant label from GGUF filename, e.g. 'Qwen3-1.7B-Q4_K_M.gguf' → 'Q4_K_M'."""
+    stem = Path(model_path).stem  # e.g. "Qwen3-1.7B-Q4_K_M"
+    parts = stem.split("-")
+    for part in reversed(parts):
+        if part and part[0].upper() in ("Q", "I"):
+            return part.upper()
+    return stem  # fallback: use entire stem
+
+
+def _write_benchmark_results(
+    results: list[BenchmarkResult],
+    variant_map: dict[str, str],  # model_path → variant name
+    measured_runs: int,
+    output_path: Path,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [
+        {
+            "model_variant": variant_map.get(result.model_path, Path(result.model_path).stem),
+            "n_threads": result.n_threads,
+            "tok_per_sec": round(result.median_tokens_per_second, 2),
+            "e2e_ms": round(result.median_duration_seconds * 1000),
+            "utterance_count": measured_runs,
+        }
+        for result in results
+    ]
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(f"Wrote benchmark results: {output_path}")
 
 
 def _print_ranked(results: list[BenchmarkResult]) -> None:
@@ -231,13 +270,15 @@ def _print_ranked(results: list[BenchmarkResult]) -> None:
             f"{result.median_tokens_per_second:>7.2f} | "
             f"{round(result.median_duration_seconds * 1000):>14} | "
             f"{result.median_completion_tokens:>19} | "
-            f"{result.finish_reasons}"
+            f"{dict(result.finish_reasons)}"
         )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Pi 5 llama.cpp model/quantization throughput sweep"
+        description="Pi 5 llama.cpp model/quantization throughput sweep",
+        epilog=_PI5_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--models",
@@ -272,6 +313,23 @@ def main() -> int:
     parser.add_argument("--no-use-mmap", dest="use_mmap", action="store_false")
     parser.add_argument("--use-mlock", action="store_true", default=False)
     parser.add_argument("--json-out", default="")
+    parser.add_argument(
+        "--variant-names",
+        default="",
+        help=(
+            "Comma-separated variant labels (e.g. Q4_K_M,Q5_K_M,Q8_0) mapping "
+            "positionally to --models. If omitted, variant is extracted from GGUF filename stem."
+        ),
+    )
+    parser.add_argument(
+        "--output-path",
+        default="build/benchmark_results.json",
+        help=(
+            "Output path for AC-schema JSON results. "
+            "Default: build/benchmark_results.json. "
+            "Pi 5 prerequisite: run ./scripts/pi5_cpu_tuning.sh apply first."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -280,20 +338,36 @@ def main() -> int:
         prompt = Path(args.prompt_file).read_text(encoding="utf-8").strip()
 
     thread_values = _parse_csv_ints(args.threads)
+    # When --threads-batch is omitted, pair each n_threads with itself (no cross-product).
+    # When explicitly provided, sweep all combinations.
     thread_batch_values = (
         _parse_csv_ints(args.threads_batch)
         if args.threads_batch.strip()
-        else thread_values
+        else []
     )
 
+    # Build variant_map: resolved model_path → variant label
+    variant_names: list[str] = (
+        [v.strip() for v in args.variant_names.split(",") if v.strip()]
+        if args.variant_names.strip()
+        else []
+    )
+    variant_map: dict[str, str] = {}
+
     results: list[BenchmarkResult] = []
-    for model in args.models:
+    for model_index, model in enumerate(args.models):
         model_path = str(Path(model).expanduser().resolve())
         if not Path(model_path).is_file():
             raise FileNotFoundError(f"Model not found: {model_path}")
 
+        # Assign variant label: positional from --variant-names or extracted from filename
+        if variant_names and model_index < len(variant_names):
+            variant_map[model_path] = variant_names[model_index]
+        else:
+            variant_map[model_path] = _extract_variant(model_path)
+
         for n_threads in thread_values:
-            for n_threads_batch in thread_batch_values:
+            for n_threads_batch in (thread_batch_values if thread_batch_values else [n_threads]):
                 print(
                     "Running benchmark:",
                     Path(model_path).name,
@@ -339,9 +413,16 @@ def main() -> int:
             }
             for result in results
         ]
-        output_path = Path(args.json_out)
-        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        print(f"Wrote benchmark JSON: {output_path}")
+        output_path_legacy = Path(args.json_out)
+        output_path_legacy.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"Wrote benchmark JSON: {output_path_legacy}")
+
+    _write_benchmark_results(
+        results=results,
+        variant_map=variant_map,
+        measured_runs=args.runs,
+        output_path=Path(args.output_path),
+    )
 
     return 0
 

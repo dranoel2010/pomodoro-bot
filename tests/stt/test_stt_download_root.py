@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 import tempfile
@@ -13,7 +15,7 @@ if "stt" not in sys.modules:
     _pkg.__path__ = [str(_STT_DIR)]  # type: ignore[attr-defined]
     sys.modules["stt"] = _pkg
 
-from stt.stt import FasterWhisperSTT, StreamingFasterWhisperSTT
+from stt.transcription import FasterWhisperSTT, StreamingFasterWhisperSTT
 
 
 class _WhisperModelStub:
@@ -33,7 +35,7 @@ class STTDownloadRootTests(unittest.TestCase):
             cwd = Path.cwd()
             os.chdir(tmp)
             try:
-                with patch("stt.stt.WhisperModel", _WhisperModelStub):
+                with patch("faster_whisper.WhisperModel", _WhisperModelStub):
                     FasterWhisperSTT(model_size="tiny")
                 created = (Path(tmp) / "models" / "stt").is_dir()
             finally:
@@ -48,7 +50,7 @@ class STTDownloadRootTests(unittest.TestCase):
         created = False
         with tempfile.TemporaryDirectory() as tmp:
             explicit_root = Path(tmp) / "custom-models"
-            with patch("stt.stt.WhisperModel", _WhisperModelStub):
+            with patch("faster_whisper.WhisperModel", _WhisperModelStub):
                 StreamingFasterWhisperSTT(model_size="tiny", download_root=str(explicit_root))
             created = explicit_root.is_dir()
 

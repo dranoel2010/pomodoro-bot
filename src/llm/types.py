@@ -6,11 +6,10 @@ import json
 import datetime as dt
 import re
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict
+from typing import TypeAlias, TypedDict
 
-from contracts.tool_contract import TOOL_NAME_ORDER
+from contracts.tool_contract import ToolName  # noqa: F401 (re-export)
 
-ToolName = Literal[*TOOL_NAME_ORDER]
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = "JSONScalar | JSONObject | JSONArray"
 JSONObject: TypeAlias = dict[str, "JSONValue"]
@@ -216,3 +215,37 @@ class EnvironmentContext:
         if end_point is None:
             return start_point
         return f"von {start_point} bis {end_point}"
+
+
+@dataclass(frozen=True, slots=True)
+class LLMResult:
+    """IPC result carrier for subprocess → main-process token transfer."""
+
+    response: StructuredResponse
+    tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineMetrics:
+    """Typed per-utterance pipeline performance metrics."""
+
+    stt_ms: int
+    llm_ms: int
+    tts_ms: int
+    tokens: int
+    tok_per_sec: float
+    e2e_ms: int
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "event": "pipeline_metrics",
+                "stt_ms": self.stt_ms,
+                "llm_ms": self.llm_ms,
+                "tts_ms": self.tts_ms,
+                "tokens": self.tokens,
+                "tok_per_sec": self.tok_per_sec,
+                "e2e_ms": self.e2e_ms,
+            },
+            separators=(",", ":"),
+        )

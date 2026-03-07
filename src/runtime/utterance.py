@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Callable
 
-from llm.types import EnvironmentContext, StructuredResponse, ToolCall
+from llm.types import EnvironmentContext, PipelineMetrics, StructuredResponse, ToolCall
 from stt.events import Utterance
-from stt.stt import STTError
+from stt.transcription import STTError
 from tts.engine import TTSError
 from contracts.ui_protocol import (
     EVENT_ASSISTANT_REPLY,
@@ -23,6 +24,7 @@ from contracts.ui_protocol import (
 
 from .ui import RuntimeUIPublisher
 from contracts.pipeline import LLMClient, STTClient, TTSClient
+from .workers.core import WorkerCallTimeoutError, WorkerCrashError, WorkerError, WorkerTaskError
 
 try:
     from llm.fast_path import maybe_fast_path_response
@@ -50,6 +52,7 @@ def process_utterance(
     fast_path_duration_seconds: float | None = None
     fast_path_used = False
     transcript_text = ""
+    llm_tokens: int = 0
 
     logger.info("Transcribing captured utterance...")
     try:
@@ -103,6 +106,7 @@ def process_utterance(
             llm_started_at = time.perf_counter()
             llm_response = assistant_llm.run(transcript_text, env=env_context)
             llm_duration_seconds = time.perf_counter() - llm_started_at
+            llm_tokens = assistant_llm.last_tokens
 
         assistant_text = llm_response["assistant_text"].strip()
         tool_call = llm_response.get("tool_call")
@@ -118,6 +122,14 @@ def process_utterance(
                 speech_service.speak(assistant_text)
                 tts_duration_seconds = time.perf_counter() - tts_started_at
         publish_idle_state()
+    except WorkerCallTimeoutError as error:
+        _log_worker_error("worker_timeout", error, logger=logger, publish_idle_state=publish_idle_state)
+    except WorkerCrashError as error:
+        _log_worker_error("worker_crash", error, logger=logger, publish_idle_state=publish_idle_state)
+    except WorkerTaskError as error:
+        _log_worker_error("worker_task_error", error, logger=logger, publish_idle_state=publish_idle_state)
+    except WorkerError as error:
+        _log_worker_error("worker_error", error, logger=logger, publish_idle_state=publish_idle_state)
     except (STTError, TTSError) as error:
         prefix = "Transcription failed" if isinstance(error, STTError) else "TTS playback failed"
         _publish_error(prefix, error, logger=logger, ui=ui, publish_idle_state=publish_idle_state)
@@ -131,16 +143,22 @@ def process_utterance(
         )
     finally:
         total_duration_seconds = time.perf_counter() - pipeline_started_at
-        logger.info(
-            "Utterance pipeline metrics: total_ms=%d stt_ms=%s llm_ms=%s tts_ms=%s fast_path=%s fast_path_ms=%s transcript_chars=%d",
-            round(total_duration_seconds * 1000),
-            _fmt_duration_ms(stt_duration_seconds),
-            _fmt_duration_ms(llm_duration_seconds),
-            _fmt_duration_ms(tts_duration_seconds),
-            fast_path_used,
-            _fmt_duration_ms(fast_path_duration_seconds),
-            len(transcript_text),
+        _llm_ms = round(llm_duration_seconds * 1000) if (not fast_path_used and llm_duration_seconds is not None) else 0
+        _tokens = llm_tokens if not fast_path_used else 0
+        _tok_per_sec = (
+            round(_tokens / llm_duration_seconds, 2)
+            if (_tokens > 0 and llm_duration_seconds is not None and llm_duration_seconds > 0.0)
+            else 0.0
         )
+        metrics = PipelineMetrics(
+            stt_ms=round(stt_duration_seconds * 1000) if stt_duration_seconds is not None else 0,
+            llm_ms=_llm_ms,
+            tts_ms=round(tts_duration_seconds * 1000) if tts_duration_seconds is not None else 0,
+            tokens=_tokens,
+            tok_per_sec=_tok_per_sec,
+            e2e_ms=round(total_duration_seconds * 1000),
+        )
+        logger.info(metrics.to_json())
 
 
 def _publish_error(
@@ -160,7 +178,15 @@ def _publish_error(
     publish_idle_state()
 
 
-def _fmt_duration_ms(value: float | None) -> str:
-    if value is None:
-        return "n/a"
-    return str(round(value * 1000))
+def _log_worker_error(
+    event: str,
+    error: Exception,
+    *,
+    logger: logging.Logger,
+    publish_idle_state: Callable[[], None],
+) -> None:
+    entry = json.dumps({"event": event, "message": str(error)}, separators=(",", ":"))
+    logger.info(entry)
+    publish_idle_state()
+
+

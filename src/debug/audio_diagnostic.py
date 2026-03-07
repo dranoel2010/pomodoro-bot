@@ -1,5 +1,7 @@
 """Diagnostic tool to help tune VAD settings."""
 
+from __future__ import annotations
+
 import logging
 import math
 import sys
@@ -12,7 +14,7 @@ from app_config import AppConfigurationError, load_app_config, load_secret_confi
 from stt.config import ConfigurationError, WakeWordConfig
 
 
-def setup_logging():
+def setup_logging() -> None:
     """Configure console logging for the diagnostic tool."""
     logging.basicConfig(
         level=logging.INFO,
@@ -20,7 +22,7 @@ def setup_logging():
     )
 
 
-def main():
+def main() -> int:
     """Run interactive microphone diagnostics for wake-word VAD tuning."""
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -39,6 +41,17 @@ def main():
     print("=== Wake Word VAD Diagnostic Tool ===\n")
     print("This tool will help you tune your voice activity detection settings.")
     print("Speak into your microphone for 5 seconds...\n")
+
+    # ALSA device selection guidance — list available audio input devices
+    available_devices = PvRecorder.get_available_devices()
+    print("Available audio input devices (set device_index in config to select one):")
+    if available_devices:
+        for idx, name in enumerate(available_devices):
+            marker = " ◀ (currently selected)" if idx == config.device_index else ""
+            print(f"  [{idx}] {name}{marker}")
+    else:
+        print("  (none found — check ALSA / audio driver setup)")
+    print()
 
     porcupine = None
     recorder = None

@@ -1,5 +1,6 @@
 """Public exports for pomodoro session and timer primitives."""
 
+from .cycle import PhaseTransition, PomodoroCycleState
 from .service import (
     DEFAULT_POMODORO_SECONDS,
     PomodoroAction,
@@ -13,6 +14,8 @@ from .tool_mapping import remap_timer_tool_for_active_pomodoro
 
 __all__ = [
     "DEFAULT_POMODORO_SECONDS",
+    "PhaseTransition",
+    "PomodoroCycleState",
     "PomodoroAction",
     "PomodoroActionResult",
     "PomodoroPhase",

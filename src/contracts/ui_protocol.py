@@ -24,6 +24,13 @@ class AppState(StrEnum):
     ERROR = "error"
 
 
+class PomodoroPhaseState(StrEnum):
+    WORK = "pomodoro_work"
+    SHORT_BREAK = "pomodoro_short_break"
+    LONG_BREAK = "pomodoro_long_break"
+    IDLE = "pomodoro_idle"
+
+
 # Websocket event types
 EVENT_HELLO = UIEvent.HELLO
 EVENT_STATE_UPDATE = UIEvent.STATE_UPDATE
@@ -40,6 +47,12 @@ STATE_TRANSCRIBING = AppState.TRANSCRIBING
 STATE_THINKING = AppState.THINKING
 STATE_REPLYING = AppState.REPLYING
 STATE_ERROR = AppState.ERROR
+
+# Pomodoro cycle phase states (distinct from AppState — tracks the cycle phase, not pipeline state)
+STATE_POMODORO_WORK = PomodoroPhaseState.WORK
+STATE_POMODORO_SHORT_BREAK = PomodoroPhaseState.SHORT_BREAK
+STATE_POMODORO_LONG_BREAK = PomodoroPhaseState.LONG_BREAK
+STATE_POMODORO_IDLE = PomodoroPhaseState.IDLE
 
 STICKY_EVENT_TYPES: frozenset[str] = frozenset(
     {

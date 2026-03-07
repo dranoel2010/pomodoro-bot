@@ -61,7 +61,7 @@ def pomodoro_status_message(snapshot: PomodoroSnapshot) -> str:
         return f"Pomodoro '{snapshot.session or DEFAULT_FOCUS_TOPIC_DE}' abgeschlossen"
     if snapshot.phase == PHASE_ABORTED:
         return f"Pomodoro '{snapshot.session or DEFAULT_FOCUS_TOPIC_DE}' gestoppt"
-    return "Bereit"
+    return "Keine aktive Pomodoro-Sitzung."
 
 
 def default_pomodoro_text(action: str, snapshot: PomodoroSnapshot) -> str:
@@ -121,3 +121,29 @@ def timer_rejection_text(action: str, reason: str) -> str:
     if reason == REASON_NOT_ACTIVE and action == ACTION_ABORT:
         return "Es gibt keinen aktiven Timer."
     return "Die Timer Aktion ist im aktuellen Zustand nicht moeglich."
+
+
+def pomodoro_work_to_break_text(session_count: int, break_seconds: int) -> str:
+    """Return German announcement for work→break phase transition."""
+    return (
+        f"Pomodoro-Einheit {session_count} abgeschlossen. "
+        f"Kurze Pause — {break_seconds // 60} Minuten."
+    )
+
+
+def pomodoro_break_to_work_text() -> str:
+    """Return German announcement for break→work phase transition."""
+    return "Kurze Pause vorbei. Naechste Fokuseinheit beginnt jetzt."
+
+
+def pomodoro_work_to_long_break_text(session_count: int, break_seconds: int) -> str:
+    """Return German announcement for work→long_break phase transition."""
+    return (
+        f"Pomodoro-Einheit {session_count} abgeschlossen. "
+        f"Lange Pause — {break_seconds // 60} Minuten. Gut gemacht."
+    )
+
+
+def pomodoro_long_break_to_work_text() -> str:
+    """Return German announcement for long_break→work cycle reset."""
+    return "Lange Pause vorbei. Neuer Zyklus beginnt."

@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 """Pipeline-facing Protocol contracts for STT, LLM, and TTS worker dependencies."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from llm.types import EnvironmentContext, StructuredResponse
     from stt.events import Utterance
-    from stt.stt import TranscriptionResult
+    from stt.transcription import TranscriptionResult
 
 
 class STTClient(Protocol):
@@ -24,6 +24,10 @@ class LLMClient(Protocol):
         extra_context: str | None = None,
         max_tokens: int | None = None,
     ) -> StructuredResponse:
+        ...
+
+    @property
+    def last_tokens(self) -> int:
         ...
 
 

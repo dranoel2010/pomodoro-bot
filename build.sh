@@ -34,9 +34,9 @@ fi
 # Install exactly locked dependencies into .venv
 "$UV_BIN" sync --frozen
 
-# Clean PyInstaller artifacts
+# Clean PyInstaller artifacts (preserve dist/pomodoro-bot.service and build/benchmark_results.json)
 rm -f main.spec
-rm -rf build dist
+rm -rf build dist/main dist/stage dist/archive.tar.gz
 mkdir -p dist
 
 # Generate a deterministic PyInstaller spec that excludes bundled libstdc++.
@@ -116,7 +116,18 @@ SPEC
 BIN="dist/main"
 [ -f "dist/main.exe" ] && BIN="dist/main.exe"
 
-cp config.toml dist/config.toml
-cp .env.dist dist/.env
+# Build release archive with the full Pi 5 deployment layout
+STAGE="dist/stage"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/dist" "$STAGE/scripts"
 
-tar -C dist -czvf dist/pomodoro-bot-release.tar.gz "$(basename "$BIN")" config.toml .env
+cp "$BIN" "$STAGE/$(basename "$BIN")"
+cp config.toml "$STAGE/config.toml"
+cp .env.dist "$STAGE/.env"
+cp pyproject.toml "$STAGE/pyproject.toml"
+cp uv.lock "$STAGE/uv.lock"
+cp dist/pomodoro-bot.service "$STAGE/dist/pomodoro-bot.service"
+cp scripts/pi5_cpu_tuning.sh "$STAGE/scripts/pi5_cpu_tuning.sh"
+cp scripts/pi5_model_sweep.py "$STAGE/scripts/pi5_model_sweep.py"
+
+tar -C "$STAGE" -czvf dist/archive.tar.gz .

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import sys
 import types
@@ -40,6 +42,8 @@ def _build_tts_stub_modules():
 
 with patch.dict(sys.modules, _build_tts_stub_modules()):
     from runtime.ticks import handle_pomodoro_tick, handle_timer_tick
+
+from contracts.ui_protocol import EVENT_ASSISTANT_REPLY, STATE_REPLYING
 
 
 class _UIServerStub:
@@ -89,14 +93,14 @@ class TickStateFlowTests(unittest.TestCase):
             publish_idle_state=lambda: idle_calls.append("idle"),
         )
 
-        self.assertIn(("replying", "Timer completed", {}), ui.states)
-        assistant_events = [payload for kind, payload in ui.events if kind == "assistant_reply"]
+        self.assertIn((STATE_REPLYING, "Timer completed", {}), ui.states)
+        assistant_events = [payload for kind, payload in ui.events if kind == EVENT_ASSISTANT_REPLY]
         self.assertEqual(1, len(assistant_events))
         self.assertNotIn("state", assistant_events[0])
         self.assertEqual(["idle"], idle_calls)
         self.assertLess(
-            ui.trace.index(("state", "replying")),
-            ui.trace.index(("event", "assistant_reply")),
+            ui.trace.index(("state", STATE_REPLYING)),
+            ui.trace.index(("event", EVENT_ASSISTANT_REPLY)),
         )
 
     def test_pomodoro_completion_publishes_replying_then_idle(self) -> None:
@@ -120,14 +124,14 @@ class TickStateFlowTests(unittest.TestCase):
             publish_idle_state=lambda: idle_calls.append("idle"),
         )
 
-        self.assertIn(("replying", "Pomodoro completed", {}), ui.states)
-        assistant_events = [payload for kind, payload in ui.events if kind == "assistant_reply"]
+        self.assertIn((STATE_REPLYING, "Pomodoro completed", {}), ui.states)
+        assistant_events = [payload for kind, payload in ui.events if kind == EVENT_ASSISTANT_REPLY]
         self.assertEqual(1, len(assistant_events))
         self.assertNotIn("state", assistant_events[0])
         self.assertEqual(["idle"], idle_calls)
         self.assertLess(
-            ui.trace.index(("state", "replying")),
-            ui.trace.index(("event", "assistant_reply")),
+            ui.trace.index(("state", STATE_REPLYING)),
+            ui.trace.index(("event", EVENT_ASSISTANT_REPLY)),
         )
 
 

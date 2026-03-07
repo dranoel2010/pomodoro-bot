@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime as dt
 import logging
 import sys
@@ -186,6 +188,74 @@ class OracleContextServiceTests(unittest.TestCase):
         )
         with self.assertRaises(RuntimeError):
             missing_calendar.add_event(title="X", start=start, end=end)
+
+    def test_ens160_absent_yields_no_air_quality_in_payload(self) -> None:
+        now = dt.datetime(2026, 3, 2, 9, 0, tzinfo=dt.timezone.utc)
+        light = _LightStub()
+        service = OracleContextService(
+            _config(enabled=True, sensor_ttl=30.0),
+            logger=logging.getLogger("test"),
+            providers=OracleProviders(ens160=None, temt6000=light, calendar=None),
+            now_fn=lambda: now,
+        )
+        payload = service.build_environment_payload()
+        self.assertEqual(123.4, payload.get("light_level_lux"))
+        self.assertNotIn("air_quality", payload)  # ENS160 absent → field not emitted
+
+    def test_temt6000_absent_yields_no_light_level_in_payload(self) -> None:
+        now = dt.datetime(2026, 3, 2, 9, 0, tzinfo=dt.timezone.utc)
+        air = _AirQualityStub()
+        service = OracleContextService(
+            _config(enabled=True, sensor_ttl=30.0),
+            logger=logging.getLogger("test"),
+            providers=OracleProviders(ens160=air, temt6000=None, calendar=None),
+            now_fn=lambda: now,
+        )
+        payload = service.build_environment_payload()
+        self.assertEqual({"aqi": 42}, payload.get("air_quality"))
+        self.assertNotIn("light_level_lux", payload)  # TEMT6000 absent → field not emitted
+
+    def test_both_sensors_absent_yields_no_sensor_fields_in_payload(self) -> None:
+        now = dt.datetime(2026, 3, 2, 9, 0, tzinfo=dt.timezone.utc)
+        service = OracleContextService(
+            _config(enabled=True, sensor_ttl=30.0),
+            logger=logging.getLogger("test"),
+            providers=OracleProviders(ens160=None, temt6000=None, calendar=None),
+            now_fn=lambda: now,
+        )
+        payload = service.build_environment_payload()
+        self.assertNotIn("air_quality", payload)
+        self.assertNotIn("light_level_lux", payload)
+
+    def test_ens160_read_error_degrades_gracefully(self) -> None:
+        class _FailingAirStub:
+            def get_readings(self):
+                raise RuntimeError("I2C bus error")
+
+        now = dt.datetime(2026, 3, 2, 9, 0, tzinfo=dt.timezone.utc)
+        service = OracleContextService(
+            _config(enabled=True, sensor_ttl=30.0),
+            logger=logging.getLogger("test"),
+            providers=OracleProviders(ens160=_FailingAirStub(), temt6000=None, calendar=None),
+            now_fn=lambda: now,
+        )
+        payload = service.build_environment_payload()
+        self.assertNotIn("air_quality", payload)  # exception swallowed, field absent
+
+    def test_temt6000_read_error_degrades_gracefully(self) -> None:
+        class _FailingLightStub:
+            def get_readings(self):
+                raise OSError("device not found")
+
+        now = dt.datetime(2026, 3, 2, 9, 0, tzinfo=dt.timezone.utc)
+        service = OracleContextService(
+            _config(enabled=True, sensor_ttl=30.0),
+            logger=logging.getLogger("test"),
+            providers=OracleProviders(ens160=None, temt6000=_FailingLightStub(), calendar=None),
+            now_fn=lambda: now,
+        )
+        payload = service.build_environment_payload()
+        self.assertNotIn("light_level_lux", payload)  # exception swallowed, field absent
 
 
 if __name__ == "__main__":

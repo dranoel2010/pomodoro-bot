@@ -1,10 +1,11 @@
 """faster-whisper transcription adapters used by runtime utterance handling."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from faster_whisper import WhisperModel
 from .events import Utterance
 
 
@@ -56,14 +57,15 @@ class FasterWhisperSTT:
         self._logger = logger or logging.getLogger(__name__)
 
         self._logger.debug(
-            f"Loading faster-whisper model: {model_size} "
-            f"(device={device}, compute_type={compute_type})"
+            "Loading faster-whisper model: %s (device=%s, compute_type=%s)",
+            model_size, device, compute_type,
         )
 
         download_root_path = self._resolve_download_root(download_root)
         self._logger.debug("Using faster-whisper download root: %s", download_root_path)
 
         try:
+            from faster_whisper import WhisperModel
             self._model = WhisperModel(
                 model_size,
                 device=device,
@@ -111,8 +113,8 @@ class FasterWhisperSTT:
             audio_float32 = audio_int16.astype(np.float32) / 32768.0
 
             self._logger.debug(
-                f"Transcribing {utterance.duration_seconds:.2f}s audio "
-                f"({len(utterance.audio_bytes)} bytes)"
+                "Transcribing %.2fs audio (%d bytes)",
+                utterance.duration_seconds, len(utterance.audio_bytes),
             )
 
             # Transcribe
@@ -146,11 +148,10 @@ class FasterWhisperSTT:
                 avg_logprob = avg_confidence / segment_count
                 confidence = max(0.0, min(1.0, np.exp(avg_logprob)))
 
-            # Fix: Format confidence separately
             confidence_str = f"{confidence:.2f}" if confidence is not None else "N/A"
             self._logger.debug(
-                f"Transcribed: '{text}' "
-                f"(language={info.language}, confidence={confidence_str})"
+                "Transcribed: %r (language=%s, confidence=%s)",
+                text, info.language, confidence_str,
             )
 
             if not text:
@@ -163,7 +164,7 @@ class FasterWhisperSTT:
             )
 
         except Exception as e:
-            self._logger.error(f"Transcription failed: {e}", exc_info=True)
+            self._logger.error("Transcription failed: %s", e, exc_info=True)
             raise STTError(f"Transcription failed: {e}") from e
 
 
@@ -242,5 +243,5 @@ class StreamingFasterWhisperSTT(FasterWhisperSTT):
             return results
 
         except Exception as e:
-            self._logger.error(f"Streaming transcription failed: {e}", exc_info=True)
+            self._logger.error("Streaming transcription failed: %s", e, exc_info=True)
             raise STTError(f"Streaming transcription failed: {e}") from e

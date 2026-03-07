@@ -56,6 +56,14 @@ def looks_like_add_calendar(lowered_prompt: str) -> bool:
     return has_calendar and has_create
 
 
+def looks_like_pomodoro_status(lowered_prompt: str) -> bool:
+    """Return whether text looks like a pomodoro status/remaining-time query."""
+    return bool(re.search(
+        r"\b(wie lange|wie viel|status|wie steht|wie laeuft|verbleibend|restzeit|wie weit)\b",
+        lowered_prompt,
+    ))
+
+
 def looks_like_show_events(lowered_prompt: str) -> bool:
     """Heuristically detect calendar listing intent from prompt text."""
     has_calendar = bool(re.search(r"\b(kalender|termin|termine|event|events)\b", lowered_prompt))
@@ -66,3 +74,11 @@ def looks_like_show_events(lowered_prompt: str) -> bool:
         )
     )
     return has_calendar and has_show
+
+
+def looks_like_tell_joke(lowered_prompt: str) -> bool:
+    """Return whether text looks like a request for a joke."""
+    return bool(re.search(
+        r"\b(witz|witze|scherz|joke|erzähl mir einen|erzaehl mir einen)\b",
+        lowered_prompt,
+    ))

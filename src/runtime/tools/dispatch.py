@@ -6,18 +6,27 @@ import logging
 from typing import TYPE_CHECKING
 
 from llm.types import JSONObject, ToolCall
-from shared.defaults import DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
-from pomodoro import PomodoroTimer, remap_timer_tool_for_active_pomodoro
+from shared.defaults import DEFAULT_FOCUS_TOPIC_DE, DEFAULT_TIMER_DURATION_SECONDS, DEFAULT_TIMER_SESSION_NAME
+from pomodoro import PomodoroCycleState, PomodoroTimer, remap_timer_tool_for_active_pomodoro
 from pomodoro.constants import (
     ACTION_ABORT,
     ACTION_RESET,
     ACTION_START,
+    PHASE_TYPE_LONG_BREAK,
+    PHASE_TYPE_SHORT_BREAK,
+    PHASE_TYPE_WORK,
     REASON_POMODORO_ACTIVE,
     REASON_SUPERSEDED_BY_POMODORO,
     REASON_TIMER_ACTIVE,
 )
+from contracts.ui_protocol import (
+    STATE_POMODORO_IDLE,
+    STATE_POMODORO_LONG_BREAK,
+    STATE_POMODORO_SHORT_BREAK,
+    STATE_POMODORO_WORK,
+)
+import contracts.tool_contract as _tc
 from contracts.tool_contract import (
-    CALENDAR_TOOL_NAMES,
     POMODORO_TOOL_TO_RUNTIME_ACTION,
     TIMER_TOOL_TO_RUNTIME_ACTION,
 )
@@ -39,6 +48,21 @@ if TYPE_CHECKING:
     from oracle.service import OracleContextService
 
 
+def _handle_tell_joke(assistant_text: str) -> str:
+    del assistant_text  # joke is hardcoded; LLM text is irrelevant
+    return (
+        "Warum können Geister so schlecht lügen? "
+        "Weil man durch sie hindurchsehen kann."
+    )
+
+
+_PHASE_TYPE_TO_POMODORO_STATE: dict[str, str] = {
+    PHASE_TYPE_WORK: STATE_POMODORO_WORK,
+    PHASE_TYPE_SHORT_BREAK: STATE_POMODORO_SHORT_BREAK,
+    PHASE_TYPE_LONG_BREAK: STATE_POMODORO_LONG_BREAK,
+}
+
+
 class RuntimeToolDispatcher:
     """Routes tool calls to timer, pomodoro, and calendar handlers."""
     def __init__(
@@ -50,6 +74,7 @@ class RuntimeToolDispatcher:
         pomodoro_timer: PomodoroTimer,
         countdown_timer: PomodoroTimer,
         ui: RuntimeUIPublisher,
+        pomodoro_cycle: PomodoroCycleState | None = None,
     ):
         self._logger = logger
         self._app_config = app_config
@@ -57,6 +82,7 @@ class RuntimeToolDispatcher:
         self._pomodoro_timer = pomodoro_timer
         self._countdown_timer = countdown_timer
         self._ui = ui
+        self._pomodoro_cycle = pomodoro_cycle
 
     def active_runtime_message(self) -> str:
         pomodoro_snapshot = self._pomodoro_timer.snapshot()
@@ -78,21 +104,42 @@ class RuntimeToolDispatcher:
                 pomodoro_active=True,
             )
 
-        if raw_name in POMODORO_TOOL_TO_RUNTIME_ACTION:
-            return self._handle_pomodoro_tool_call(raw_name, normalized_arguments, assistant_text)
-        if raw_name in TIMER_TOOL_TO_RUNTIME_ACTION:
-            return self._handle_timer_tool_call(raw_name, normalized_arguments, assistant_text)
-        if raw_name in CALENDAR_TOOL_NAMES:
-            return handle_calendar_tool_call(
-                tool_name=raw_name,
-                arguments=normalized_arguments,
-                oracle_service=self._oracle_service,
-                app_config=self._app_config,
-                logger=self._logger,
-            )
+        match raw_name:
+            case _tc.TOOL_STATUS_POMODORO:
+                return self._handle_pomodoro_status_query(assistant_text)
+            case (
+                _tc.TOOL_START_POMODORO
+                | _tc.TOOL_STOP_POMODORO
+                | _tc.TOOL_PAUSE_POMODORO
+                | _tc.TOOL_CONTINUE_POMODORO
+                | _tc.TOOL_RESET_POMODORO
+            ):
+                return self._handle_pomodoro_tool_call(raw_name, normalized_arguments, assistant_text)
+            case (
+                _tc.TOOL_START_TIMER
+                | _tc.TOOL_STOP_TIMER
+                | _tc.TOOL_PAUSE_TIMER
+                | _tc.TOOL_CONTINUE_TIMER
+                | _tc.TOOL_RESET_TIMER
+            ):
+                return self._handle_timer_tool_call(raw_name, normalized_arguments, assistant_text)
+            case _tc.TOOL_SHOW_UPCOMING_EVENTS | _tc.TOOL_ADD_CALENDAR_EVENT:
+                return handle_calendar_tool_call(
+                    tool_name=raw_name,
+                    arguments=normalized_arguments,
+                    oracle_service=self._oracle_service,
+                    app_config=self._app_config,
+                    logger=self._logger,
+                )
+            case _tc.TOOL_TELL_JOKE:
+                return _handle_tell_joke(assistant_text)
+            case _:
+                self._logger.warning("Unsupported tool call: %s", raw_name)
+                return assistant_text
 
-        self._logger.warning("Unsupported tool call: %s", raw_name)
-        return assistant_text
+    def _handle_pomodoro_status_query(self, assistant_text: str) -> str:
+        del assistant_text  # status is always live data; LLM text cannot know remaining time
+        return pomodoro_status_message(self._pomodoro_timer.snapshot())
 
     def _handle_pomodoro_tool_call(
         self,
@@ -126,6 +173,27 @@ class RuntimeToolDispatcher:
             if result.accepted
             else pomodoro_rejection_text(action, result.reason)
         )
+        dispatch_cycle_phase: str | None = None
+        dispatch_session_count: int | None = None
+        if self._pomodoro_cycle is not None and result.accepted:
+            if action == ACTION_START:
+                self._pomodoro_cycle.begin_cycle(
+                    session_name=result.snapshot.session or DEFAULT_FOCUS_TOPIC_DE
+                )
+            elif action == ACTION_ABORT:
+                self._pomodoro_cycle.reset()
+            elif action == ACTION_RESET:
+                self._pomodoro_cycle.begin_cycle(
+                    session_name=result.snapshot.session or DEFAULT_FOCUS_TOPIC_DE
+                )
+            if self._pomodoro_cycle.active:
+                dispatch_cycle_phase = _PHASE_TYPE_TO_POMODORO_STATE.get(
+                    self._pomodoro_cycle.phase_type, STATE_POMODORO_IDLE
+                )
+                dispatch_session_count = self._pomodoro_cycle.session_count
+            else:
+                dispatch_cycle_phase = STATE_POMODORO_IDLE
+                dispatch_session_count = 0
         self._ui.publish_pomodoro_update(
             result.snapshot,
             action=action,
@@ -133,6 +201,8 @@ class RuntimeToolDispatcher:
             reason=result.reason,
             tool_name=tool_name,
             motivation=response_text,
+            cycle_phase=dispatch_cycle_phase,
+            session_count=dispatch_session_count,
         )
         return response_text
 

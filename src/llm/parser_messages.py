@@ -16,6 +16,7 @@ from contracts.tool_contract import (
     TOOL_SHOW_UPCOMING_EVENTS,
     TOOL_START_POMODORO,
     TOOL_START_TIMER,
+    TOOL_STATUS_POMODORO,
     TOOL_STOP_POMODORO,
     TOOL_STOP_TIMER,
 )
@@ -88,6 +89,8 @@ def fallback_assistant_text(tool_call: ToolCall | None) -> str:
         return "Ich setze die Pomodoro Sitzung fort."
     if name == TOOL_RESET_POMODORO:
         return "Ich setze die Pomodoro Sitzung zurueck."
+    if name == TOOL_STATUS_POMODORO:
+        return ""  # live timer data; dispatcher always uses snapshot, not this text
     if name == TOOL_SHOW_UPCOMING_EVENTS:
         return "Ich zeige die anstehenden Termine im gewuenschten Zeitraum."
     if name == TOOL_ADD_CALENDAR_EVENT:

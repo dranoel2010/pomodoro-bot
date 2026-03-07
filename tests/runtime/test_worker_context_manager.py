@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import types
 import unittest
@@ -64,6 +66,7 @@ class WorkerContextManagerTests(unittest.TestCase):
         process.close.assert_called_once()
 
     def test_llm_worker_run_uses_typed_payload(self) -> None:
+        from llm.types import LLMResult
         worker_config = llm_workers._WorkerConfig(llm_config=object(), cpu_cores=())
         response = {"assistant_text": "ok", "tool_call": None}
         with patch(
@@ -71,7 +74,7 @@ class WorkerContextManagerTests(unittest.TestCase):
             return_value=worker_config,
         ), patch("runtime.workers.llm._ProcessWorker") as process_cls:
             process = process_cls.return_value
-            process.call.return_value = response
+            process.call.return_value = LLMResult(response=response, tokens=42)
             worker = llm_workers.LLMWorker(config=object())
             result = worker.run("hello")
 
@@ -79,6 +82,7 @@ class WorkerContextManagerTests(unittest.TestCase):
         self.assertIsInstance(payload, llm_workers.LLMPayload)
         self.assertEqual("hello", payload.user_prompt)
         self.assertEqual(response, result)
+        self.assertEqual(42, worker.last_tokens)
 
     def test_tts_worker_speak_uses_typed_payload(self) -> None:
         tts_engine_module = types.ModuleType("tts.engine")

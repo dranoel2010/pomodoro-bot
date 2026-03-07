@@ -70,7 +70,7 @@ src/                          ← Added to sys.path; imports use module name dir
   stt/
     events.py                 ← Utterance, QueueEventPublisher, event dataclasses
     service.py                ← WakeWordService
-    stt.py                    ← TranscriptionResult, STTError
+    transcription.py          ← TranscriptionResult, STTError
     factory.py
   tts/
     engine.py                 ← TTSError

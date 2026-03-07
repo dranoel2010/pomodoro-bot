@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Final, cast
 from contracts import StartupError
 from llm.config import ConfigurationError
 from llm.factory import create_llm_config
+from llm.types import LLMResult
 
 from .core import _ProcessWorker
 
@@ -48,12 +49,14 @@ class _LLMProcess:
     def handle(self, payload: object) -> object:
         if not isinstance(payload, LLMPayload):
             raise ValueError(f"Expected LLMPayload, got {type(payload).__name__}")
-        return self._llm.run(
+        response = self._llm.run(
             payload.user_prompt,
             env=payload.env,
             extra_context=payload.extra_context,
             max_tokens=payload.max_tokens,
         )
+        return LLMResult(response=response, tokens=self._llm.last_tokens)
+
 
 def _create_llm_process(worker_config: _WorkerConfig) -> _LLMProcess:
     return _LLMProcess(worker_config.llm_config)
@@ -185,6 +188,7 @@ class LLMWorker:
             log_level=log_level,
             logger=worker_logger,
         )
+        self._last_tokens: int = 0
 
     def run(
         self,
@@ -200,7 +204,13 @@ class LLMWorker:
             extra_context=extra_context,
             max_tokens=max_tokens,
         )
-        return cast("StructuredResponse", self._worker.call(payload))
+        result = cast("LLMResult", self._worker.call(payload))
+        self._last_tokens = result.tokens
+        return result.response
+
+    @property
+    def last_tokens(self) -> int:
+        return self._last_tokens
 
     def close(self, timeout_seconds: float = _DEFAULT_CLOSE_TIMEOUT) -> None:
         self._worker.close(timeout_seconds=timeout_seconds)

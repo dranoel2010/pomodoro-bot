@@ -14,7 +14,7 @@ from .core import _ProcessWorker, WorkerInitError
 if TYPE_CHECKING:
     from stt.config import STTConfig, WakeWordConfig
     from stt.events import Utterance
-    from stt.stt import TranscriptionResult
+    from stt.transcription import TranscriptionResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +24,7 @@ class _WorkerConfig:
 
 class _STTProcess:
     def __init__(self, config: "STTConfig") -> None:
-        from stt.stt import FasterWhisperSTT
+        from stt.transcription import FasterWhisperSTT
 
         self._stt = FasterWhisperSTT(
             model_size=config.model_size,
@@ -72,7 +72,7 @@ class STTWorker:
         )
 
     def transcribe(self, utterance: "Utterance") -> "TranscriptionResult":
-        from stt.stt import STTError
+        from stt.transcription import STTError
 
         try:
             result = self._worker.call(utterance)

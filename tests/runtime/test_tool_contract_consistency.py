@@ -4,7 +4,9 @@ from contracts.tool_contract import (
     CALENDAR_TOOL_NAMES,
     INTENT_TO_POMODORO_TOOL,
     INTENT_TO_TIMER_TOOL,
+    POMODORO_TOOL_NAMES,
     POMODORO_TOOL_TO_RUNTIME_ACTION,
+    PURE_LLM_TOOL_NAMES,
     TIMER_TOOL_TO_RUNTIME_ACTION,
     TOOL_NAME_ORDER,
     TOOL_NAMES,
@@ -18,10 +20,13 @@ class ToolContractConsistencyTests(unittest.TestCase):
         self.assertEqual(len(TOOL_NAME_ORDER), len(set(TOOL_NAME_ORDER)))
 
     def test_runtime_dispatch_and_calendar_cover_all_tools(self) -> None:
+        # POMODORO_TOOL_NAMES covers all pomodoro dispatch paths including read-only
+        # query tools (e.g. TOOL_STATUS_POMODORO) that are not in POMODORO_TOOL_TO_RUNTIME_ACTION.
         covered = (
             set(TIMER_TOOL_TO_RUNTIME_ACTION)
-            | set(POMODORO_TOOL_TO_RUNTIME_ACTION)
+            | POMODORO_TOOL_NAMES
             | set(CALENDAR_TOOL_NAMES)
+            | PURE_LLM_TOOL_NAMES
         )
         self.assertEqual(set(TOOL_NAMES), covered)
 
